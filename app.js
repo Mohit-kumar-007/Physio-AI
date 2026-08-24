@@ -68,6 +68,7 @@ const T = {
       { key: 'all',      label: '🌐 All' },
       { key: 'back',     label: '🔙 Back' },
       { key: 'knee',     label: '🦵 Knee' },
+      { key: 'hip',      label: '🦴 Hip' },
       { key: 'shoulder', label: '💪 Shoulder' },
       { key: 'neck',     label: '🧍 Neck' },
       { key: 'posture',  label: '🧘 Posture' },
@@ -152,6 +153,7 @@ const T = {
       { key: 'all',      label: '🌐 सभी' },
       { key: 'back',     label: '🔙 कमर' },
       { key: 'knee',     label: '🦵 घुटना' },
+      { key: 'hip',      label: '🦴 कूल्हा' },
       { key: 'shoulder', label: '💪 कंधा' },
       { key: 'neck',     label: '🧍 गर्दन' },
       { key: 'posture',  label: '🧘 मुद्रा' },
@@ -181,43 +183,40 @@ const T = {
 
 /* ══════════════════════════════════════════════════
    EXERCISE DATA
+   Loaded from the backend catalogue. Kept in a module-level cache so views
+   can render synchronously after the first fetch.
 ══════════════════════════════════════════════════ */
-const EXERCISES = [
-  { id:1, slug:'lumbar-extension',   name:'Lumbar Extension',       nameHi:'लंबर एक्सटेंशन',      cat:'back',     part:'Lower Back',      diff:'easy',   reps:10, sec:30, desc:'Gentle back bend to relieve disc pressure and stiffness.',         descHi:'कमर के लचीलेपन और निचली पीठ दर्द के लिए।' },
-  { id:2, slug:'cat-cow',            name:'Cat-Cow Stretch',         nameHi:'कैट-काउ स्ट्रैच',     cat:'back',     part:'Spine & Core',     diff:'easy',   reps:12, sec:45, desc:'Mobilizes lumbar spine and relieves thoracic tightness.',         descHi:'रीढ़ की हड्डी के लिए प्रभावी खिंचाव।' },
-  { id:3, slug:'bird-dog',           name:'Bird Dog',                nameHi:'बर्ड डॉग',             cat:'back',     part:'Core & Lower Back',diff:'medium', reps:10, sec:40, desc:'Core stabilization exercise for lumbar spine support.',           descHi:'कोर मजबूती के लिए रीढ़ स्थिरीकरण व्यायाम।' },
-  { id:4, slug:'quad-sets',          name:'Quadriceps Setting',      nameHi:'क्वाड्रिसेप्स सेटिंग',cat:'knee',     part:'Knee / Quad',      diff:'easy',   reps:15, sec:30, desc:'Isometric quad contraction supporting patellar alignment.',        descHi:'घुटनों को मजबूत करने के लिए आइसोमेट्रिक व्यायाम।' },
-  { id:5, slug:'straight-leg-raise', name:'Straight Leg Raise',      nameHi:'स्ट्रैट लेग रेज़',     cat:'knee',     part:'Knee & Hip',       diff:'medium', reps:12, sec:40, desc:'Strengthens hip flexors without compressing the knee joint.',      descHi:'घुटने पर दबाव डाले बिना कूल्हे मजबूत करें।' },
-  { id:6, slug:'terminal-knee-ext',  name:'Terminal Knee Extension', nameHi:'टर्मिनल नी एक्सटेंशन',cat:'knee',     part:'Knee / VMO',       diff:'medium', reps:15, sec:35, desc:'Targets VMO muscle to improve knee tracking and stability.',      descHi:'घुटने की स्थिरता के लिए VMO मांसपेशी व्यायाम।' },
-  { id:7, slug:'pendulum',           name:'Shoulder Pendulum',        nameHi:'शोल्डर पेंडुलम',       cat:'shoulder', part:'Rotator Cuff',     diff:'easy',   reps:15, sec:30, desc:'Passive ROM exercise for frozen shoulder or rotator cuff pain.',  descHi:'कंधे की जकड़न के लिए हल्का झुलाव व्यायाम।' },
-  { id:8, slug:'wall-slides',        name:'Wall Slides',              nameHi:'वॉल स्लाइड्स',         cat:'shoulder', part:'Shoulder & Traps', diff:'medium', reps:10, sec:35, desc:'Improves shoulder blade mechanics and posture.',                   descHi:'कंधे की मुद्रा और मांसपेशियों के लिए।' },
-  { id:9, slug:'chin-tuck',          name:'Cervical Chin Tuck',       nameHi:'सर्वाइकल चिन टक',      cat:'neck',     part:'Cervical Spine',   diff:'easy',   reps:10, sec:20, desc:'Corrects forward head posture and strengthens cervical flexors.',  descHi:'गर्दन की मुद्रा में सुधार और दर्द राहत।' },
-  { id:10,slug:'neck-rotation',      name:'Cervical Rotation',        nameHi:'सर्वाइकल रोटेशन',      cat:'neck',     part:'Neck Muscles',     diff:'easy',   reps:10, sec:20, desc:'Gentle neck rotations to restore range of motion.',              descHi:'गर्दन की गति सीमा बहाल करने के लिए।' },
-  { id:11,slug:'posture-row',        name:'Scapular Retraction',      nameHi:'स्कैपुलर रिट्रैक्शन', cat:'posture',  part:'Mid Back & Traps',  diff:'easy',   reps:12, sec:30, desc:'Strengthens mid-back muscles to correct slouched posture.',       descHi:'झुकी हुई मुद्रा सुधारने के लिए मध्य-पीठ व्यायाम।' },
-  { id:12,slug:'thoracic-ext',       name:'Thoracic Extension',       nameHi:'थोरैसिक एक्सटेंशन',    cat:'posture',  part:'Thoracic Spine',   diff:'medium', reps:10, sec:30, desc:'Opens thoracic spine to reduce kyphosis and shoulder tension.',   descHi:'वक्षीय रीढ़ खोलकर कूबड़ और कंधे की जकड़न कम करें।' },
-];
+let EXERCISES = [];
+
+async function loadExercises() {
+  try {
+    const data = await API.exercises();
+    EXERCISES = data.items;
+    // Keep the landing-page count honest as the catalogue grows.
+    const counter = $('statExCount');
+    if (counter) counter.textContent = EXERCISES.length;
+  } catch (err) {
+    EXERCISES = [];
+    console.error('Could not load exercises:', err.message);
+  }
+  return EXERCISES;
+}
 
 /* ══════════════════════════════════════════════════
    STATE
 ══════════════════════════════════════════════════ */
 let lang = localStorage.getItem('pm_lang') || 'en';
-let user = JSON.parse(localStorage.getItem('pm_user') || 'null');
+let user = null;                 // resolved from the server via the stored token
 let currentView = 'landing';
 let currentCat  = 'all';
 let currentDiag = null;
 let activePlan  = null;
 let authMode    = 'login';
+let analytics   = null;          // last /api/analytics payload
 
-let sessions = [
-  { id:1, name:'Lumbar Extension',  reps:10, target:10, quality:82, rom:108, sec:32, errors:['Lower back arching'],   date: new Date(Date.now()-86400000*3).toISOString() },
-  { id:2, name:'Cat-Cow Stretch',   reps:12, target:12, quality:89, rom:118, sec:45, errors:[],                        date: new Date(Date.now()-86400000*2).toISOString() },
-  { id:3, name:'Quadriceps Setting',reps:15, target:15, quality:93, rom:125, sec:30, errors:['Knee valgus noted'],     date: new Date(Date.now()-86400000).toISOString()   },
-  { id:4, name:'Chin Tuck',         reps:10, target:10, quality:96, rom:130, sec:20, errors:[],                        date: new Date().toISOString()                      },
-];
-
-let sessionTimer = null;
-let sessionSeconds = 0;
-let sessionReps = 0;
+// Live pose session handle (from pose.js) plus the exercise it belongs to.
+let liveSession = null;
+let liveExercise = null;
 
 /* ══════════════════════════════════════════════════
    HELPERS
@@ -227,13 +226,54 @@ const $  = id => document.getElementById(id);
 const set = (id, txt) => { const el=$(id); if(el) el.textContent = txt; };
 const html = (id, h) => { const el=$(id); if(el) el.innerHTML = h; };
 
+/** Escape anything that came from a user or the network before it touches innerHTML. */
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+));
+
+/** Pick the field for the active language, falling back to English. */
+const tr = (obj, field) => (lang === 'hi' && obj[field + '_hi']) || obj[field] || '';
+
+function toast(message, tone = 'error') {
+  const el = $('toast');
+  if (!el) return;
+  el.textContent = message;
+  el.className = 'toast ' + tone + ' show';
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => { el.className = 'toast ' + tone; }, 4200);
+}
+
 /* ══════════════════════════════════════════════════
    INIT
 ══════════════════════════════════════════════════ */
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   bindEvents();
   renderAll();
+
+  // Restore the signed-in user from the stored token, then load the catalogue.
+  // Both are independent, so let them run together.
+  const [me] = await Promise.all([
+    API.isLoggedIn() ? API.me().catch(() => null) : Promise.resolve(null),
+    loadExercises(),
+  ]);
+  user = me;
+  if (!user) API.logout();          // token was rejected or expired
+
+  renderAll();
+  if (user) refreshPlan();
 });
+
+/** Pull the active plan so the My Plan tab is populated on load. */
+async function refreshPlan() {
+  try {
+    const plan = await API.activePlan();
+    activePlan = plan.content;
+    activePlan.id = plan.id;
+  } catch {
+    activePlan = null;             // 404 simply means no plan generated yet
+  }
+  if (currentView === 'plan') renderPlan();
+}
 
 function bindEvents() {
   // Nav links
@@ -343,7 +383,17 @@ function renderAll() {
   set('genPlanBtn',     d.genPlanBtn);
   set('disclaimerText', d.disclaimer);
   // Chips
-  html('chipsRow', d.chips.map(c => `<button class="chip" onclick="quickSend('${c.replace(/'/g,"\\'")}')"> ${c}</button>`).join(''));
+  // Bind the handler rather than interpolating the text into an onclick
+  // attribute - the Hindi chips contain characters that break inline quoting.
+  const chipsRow = $('chipsRow');
+  chipsRow.innerHTML = '';
+  d.chips.forEach(text => {
+    const chip = document.createElement('button');
+    chip.className = 'chip';
+    chip.textContent = text;
+    chip.addEventListener('click', () => quickSend(text));
+    chipsRow.appendChild(chip);
+  });
   // Exercises
   set('exTitle', d.exTitle);
   set('exSub',   d.exSub);
@@ -370,54 +420,76 @@ function renderAll() {
 /* ══════════════════════════════════════════════════
    AI ASSISTANT CHAT
 ══════════════════════════════════════════════════ */
-function sendMessage() {
+async function sendMessage() {
   const input = $('chatInput');
   const text = input.value.trim();
   if (!text) return;
   input.value = '';
 
-  // Hide empty state
   const empty = $('chatEmpty');
   if (empty) empty.style.display = 'none';
 
   const box = $('chatMessages');
-  // User bubble
-  box.appendChild(makeBubble(text, 'user'));
+  box.appendChild(makeUserBubble(text));
   box.scrollTop = box.scrollHeight;
 
-  // Typing indicator
-  const typing = makeBubble(`<div class="typing-dots"><span></span><span></span><span></span></div>`, 'bot');
+  const typing = makeBotBubble(
+    '<div class="typing-dots"><span></span><span></span><span></span></div>'
+  );
   typing.id = 'typingBubble';
   box.appendChild(typing);
   box.scrollTop = box.scrollHeight;
 
-  // AI response after delay
-  setTimeout(() => {
-    const typing = $('typingBubble');
-    if (typing) typing.remove();
-
-    const { diag, reply } = analyzeSymptoms(text);
-    currentDiag = diag;
-
-    box.appendChild(makeBubble(reply, 'bot'));
+  let result;
+  try {
+    result = await API.assess(text, lang);
+  } catch (err) {
+    $('typingBubble')?.remove();
+    box.appendChild(makeBotBubble(esc(err.message)));
     box.scrollTop = box.scrollHeight;
+    toast(err.message);
+    return;
+  }
 
-    renderDiagCard();
-    $('genPlanBtn').style.display = 'block';
+  $('typingBubble')?.remove();
+  currentDiag = result;
 
-    // Speak
-    if ('speechSynthesis' in window) {
-      const u = new SpeechSynthesisUtterance(reply);
-      u.lang = lang === 'hi' ? 'hi-IN' : 'en-US';
-      speechSynthesis.speak(u);
-    }
-  }, 900);
+  // Red flags come first and are visually distinct - they mean "see a
+  // clinician", not "here is your exercise plan".
+  if (result.red_flags && result.red_flags.length) {
+    box.appendChild(makeBotBubble(
+      `<strong>${lang === 'hi' ? 'चेतावनी' : 'Warning'}</strong><ul class="flag-list">` +
+      result.red_flags.map(f => `<li>${esc(f)}</li>`).join('') + '</ul>'
+    ));
+  }
+
+  box.appendChild(makeBotBubble(esc(result.reply)));
+  box.scrollTop = box.scrollHeight;
+
+  renderDiagCard();
+  speak(result.reply);
 }
 
-function makeBubble(content, role) {
+function speak(text) {
+  if (!('speechSynthesis' in window)) return;
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = lang === 'hi' ? 'hi-IN' : 'en-US';
+  speechSynthesis.speak(utterance);
+}
+
+/** User text is never trusted as markup - it goes in as text, not HTML. */
+function makeUserBubble(text) {
   const div = document.createElement('div');
-  div.className = 'bubble ' + role;
-  div.innerHTML = content;
+  div.className = 'bubble user';
+  div.textContent = text;
+  return div;
+}
+
+/** Callers must escape any interpolated value before passing it here. */
+function makeBotBubble(safeHtml) {
+  const div = document.createElement('div');
+  div.className = 'bubble bot';
+  div.innerHTML = safeHtml;
   return div;
 }
 
@@ -426,127 +498,102 @@ function quickSend(text) {
   sendMessage();
 }
 
-function analyzeSymptoms(text) {
-  const lo = text.toLowerCase();
-  let diag;
-
-  if (lo.includes('knee') || lo.includes('घुटने') || lo.includes('घुटना')) {
-    diag = {
-      condition: 'Patellofemoral Pain Syndrome',
-      conditionHi: 'घुटने के जोड़ का दर्द (पेटेलोफेमोरल)',
-      confidence: 0.87,
-      symptoms: ['Knee Swelling', 'Stair Difficulty', 'Patellar Clicking'],
-      symptomsHi: ['घुटनों में सूजन', 'सीढ़ी चढ़ने में परेशानी', 'घुटने में क्लिकिंग'],
-      rec: 'Recommended: Quadriceps setting, straight leg raises & low-impact mobility exercises.',
-      recHi: 'सुझाव: क्वाड्रिसेप्स सेटिंग, स्ट्रेट लेग रेज़ और हल्के गतिशीलता व्यायाम।',
-      planCat: 'knee',
-    };
-  } else if (lo.includes('shoulder') || lo.includes('कंधे') || lo.includes('कंधा')) {
-    diag = {
-      condition: 'Adhesive Capsulitis (Frozen Shoulder)',
-      conditionHi: 'अडहेसिव कैप्सुलाइटिस (कंधे की जकड़न)',
-      confidence: 0.84,
-      symptoms: ['Restricted Overhead Reach', 'Shoulder Joint Ache', 'Night Pain'],
-      symptomsHi: ['ऊपर हाथ उठाने में दिक्कत', 'कंधे में दर्द', 'रात का दर्द'],
-      rec: 'Recommended: Pendulum swings, wall slides & gentle warmth application twice daily.',
-      recHi: 'सुझाव: पेंडुलम स्विंग्स, वॉल स्लाइड्स और दिन में दो बार गर्म सेंक।',
-      planCat: 'shoulder',
-    };
-  } else if (lo.includes('neck') || lo.includes('गर्दन')) {
-    diag = {
-      condition: 'Cervical Muscle Strain',
-      conditionHi: 'सर्वाइकल मांसपेशियों में खिंचाव',
-      confidence: 0.91,
-      symptoms: ['Neck Stiffness', 'Postural Headache', 'Upper Back Tightness'],
-      symptomsHi: ['गर्दन की जकड़न', 'मुद्रा-जनित सिरदर्द', 'ऊपरी पीठ में कसाव'],
-      rec: 'Recommended: Cervical chin tucks, gentle neck rotations & ergonomic screen adjustment.',
-      recHi: 'सुझाव: सर्वाइकल चिन टक्स, गर्दन की हल्की घुमावट और एर्गोनॉमिक स्क्रीन समायोजन।',
-      planCat: 'neck',
-    };
-  } else {
-    diag = {
-      condition: 'Lumbar Disc Spondylosis',
-      conditionHi: 'लंबर डिस्क स्पॉन्डिलोसिस',
-      confidence: 0.93,
-      symptoms: ['Lower Back Pain', 'Stiffness on Bending', 'Hip Radiation'],
-      symptomsHi: ['कमर दर्द', 'झुकने पर जकड़न', 'कूल्हे में दर्द फैलना'],
-      rec: 'Recommended: Lumbar extension, cat-cow stretches, core stabilization & ice therapy.',
-      recHi: 'सुझाव: लंबर एक्सटेंशन, कैट-काउ स्ट्रैच, कोर स्टेबलाइज़ेशन और बर्फ की सेंक।',
-      planCat: 'back',
-    };
-  }
-
-  const condName = lang === 'hi' ? diag.conditionHi : diag.condition;
-  const pct = Math.round(diag.confidence * 100);
-  const reply = lang === 'hi'
-    ? `आपके लक्षणों के आधार पर संभावित स्थिति **${condName}** है (${pct}% विश्वास)। मैं आपके लिए व्यक्तिगत रिकवरी योजना तैयार कर सकता हूँ!`
-    : `Based on your symptoms, the most likely condition is **${condName}** (${pct}% confidence). I can generate a tailored recovery plan for you!`;
-
-  return { diag, reply };
-}
-
 function renderDiagCard() {
   if (!currentDiag) return;
   const d = t();
-  const name = lang === 'hi' ? currentDiag.conditionHi : currentDiag.condition;
-  const syms = lang === 'hi' ? currentDiag.symptomsHi  : currentDiag.symptoms;
-  const rec  = lang === 'hi' ? currentDiag.recHi        : currentDiag.rec;
+  const name = tr(currentDiag, 'condition');
+  const syms = (lang === 'hi' ? currentDiag.symptoms_hi : currentDiag.symptoms) || [];
+  const rec  = tr(currentDiag, 'advice');
   const pct  = Math.round(currentDiag.confidence * 100);
+
+  // A low-confidence result must look low-confidence, not authoritative.
+  const barColor = currentDiag.is_confident ? '' : 'background:#f59e0b';
+
+  const alternatives = (currentDiag.alternatives || []).length ? `
+    <div class="alt-block">
+      <div class="alt-label">${lang === 'hi' ? 'अन्य संभावनाएँ' : 'Also considered'}</div>
+      ${currentDiag.alternatives.map(a =>
+        `<span class="s-tag">${esc(lang === 'hi' ? a.condition_hi : a.condition)}</span>`
+      ).join('')}
+    </div>` : '';
 
   html('diagContent', `
     <div class="diag-gradient-card">
-      <div class="diag-condition-lbl">${d.likelyCondition}</div>
-      <div class="diag-condition-name">${name}</div>
+      <div class="diag-condition-lbl">${esc(d.likelyCondition)}</div>
+      <div class="diag-condition-name">${esc(name)}</div>
       <div class="progress-wrap">
         <div class="progress-row">
-          <span>${d.confidence}</span><span>${pct}%</span>
+          <span>${esc(d.confidence)}</span><span>${pct}%</span>
         </div>
         <div class="progress-track">
-          <div class="progress-fill" style="width:${pct}%"></div>
+          <div class="progress-fill" style="width:${pct}%;${barColor}"></div>
         </div>
       </div>
     </div>
     <div style="margin-top:.9rem">
-      <div style="font-size:.72rem;font-weight:700;color:var(--slate-500);margin-bottom:.35rem">${d.symptoms}</div>
-      <div class="symptom-tags">${syms.map(s=>`<span class="s-tag">${s}</span>`).join('')}</div>
+      <div style="font-size:.72rem;font-weight:700;color:var(--slate-500);margin-bottom:.35rem">${esc(d.symptoms)}</div>
+      <div class="symptom-tags">${syms.map(s => `<span class="s-tag">${esc(s)}</span>`).join('')}</div>
     </div>
-    <p class="diag-rec">${rec}</p>
+    <p class="diag-rec">${esc(rec)}</p>
+    ${alternatives}
   `);
+
   set('genPlanBtn', d.genPlanBtn);
-  $('genPlanBtn').style.display = 'block';
+  // Nothing to plan from until the diagnosis is solid enough to act on.
+  $('genPlanBtn').style.display = currentDiag.is_confident ? 'block' : 'none';
 }
 
 function handleMic() {
   const btn = $('micBtn');
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (SR) {
-    const rec = new SR();
-    rec.lang = lang === 'hi' ? 'hi-IN' : 'en-US';
-    btn.classList.add('recording');
-    rec.onresult = e => { $('chatInput').value = e.results[0][0].transcript; btn.classList.remove('recording'); };
-    rec.onerror  = () => btn.classList.remove('recording');
-    rec.onend    = () => btn.classList.remove('recording');
-    rec.start();
-  } else {
-    // Simulate
-    btn.classList.add('recording');
-    setTimeout(() => {
-      btn.classList.remove('recording');
-      $('chatInput').value = lang === 'hi' ? 'मुझे कमर के निचले हिस्से में दर्द है' : 'I have lower back pain and stiffness';
-    }, 1400);
+  if (!SR) {
+    toast(lang === 'hi'
+      ? 'यह ब्राउज़र आवाज़ पहचान का समर्थन नहीं करता। कृपया टाइप करें।'
+      : 'This browser does not support speech recognition. Please type instead.');
+    return;
   }
+  const rec = new SR();
+  rec.lang = lang === 'hi' ? 'hi-IN' : 'en-US';
+  btn.classList.add('recording');
+  rec.onresult = e => { $('chatInput').value = e.results[0][0].transcript; };
+  rec.onerror  = e => {
+    toast(e.error === 'not-allowed'
+      ? (lang === 'hi' ? 'माइक्रोफ़ोन की अनुमति नहीं मिली।'
+                       : 'Microphone permission was denied.')
+      : (lang === 'hi' ? 'आवाज़ पहचान विफल रही।' : 'Speech recognition failed.'));
+  };
+  rec.onend = () => btn.classList.remove('recording');
+  rec.start();
 }
 
-function handleFile(e) {
+async function handleFile(e) {
   const file = e.target.files[0];
   if (!file) return;
+  e.target.value = '';                      // allow re-picking the same file
+
   const status = $('ocrStatus');
   status.style.display = 'block';
+  status.className = 'ocr-status';
   status.textContent = `📄 ${file.name} — ${lang === 'hi' ? 'अपलोड हो रहा है…' : 'uploading…'}`;
-  setTimeout(() => {
-    status.innerHTML = `✅ <b>${file.name}</b> — ${lang === 'hi' ? 'OCR पूर्ण: L4-L5 हल्की डिस्क उभार, पेटेलर अलाइनमेंट सामान्य।' : 'OCR Complete: L4-L5 Mild Disc Bulge, Patellar Alignment Intact.'}`;
-    $('chatInput').value = lang === 'hi' ? 'MRI में L4-L5 डिस्क उभार और कमर दर्द' : 'MRI shows L4-L5 disc bulge with lower back pain';
-  }, 1600);
+
+  try {
+    const result = await API.uploadReport(file);
+    if (!result.ok) {
+      // Say what actually went wrong instead of inventing findings.
+      status.className = 'ocr-status warn';
+      status.textContent = `⚠ ${file.name} — ${result.message}`;
+      return;
+    }
+    status.className = 'ocr-status ok';
+    status.innerHTML = `✅ <b>${esc(file.name)}</b> — ${esc(result.summary)}`;
+    if (result.suggested_text) {
+      $('chatInput').value = result.suggested_text;
+      $('chatInput').focus();
+    }
+  } catch (err) {
+    status.className = 'ocr-status warn';
+    status.textContent = `⚠ ${err.message}`;
+  }
 }
 
 /* ══════════════════════════════════════════════════
@@ -556,117 +603,295 @@ function setCat(cat) {
   currentCat = cat;
   const d = t();
   html('catBar', d.cats.map(c => `
-    <button class="cat-btn${c.key===cat?' active':''}" onclick="setCat('${c.key}')">${c.label}</button>`).join(''));
+    <button class="cat-btn${c.key === cat ? ' active' : ''}" onclick="setCat('${c.key}')">${esc(c.label)}</button>`).join(''));
   renderExercises();
 }
 
 function renderExercises() {
-  const filtered = currentCat === 'all' ? EXERCISES : EXERCISES.filter(e => e.cat === currentCat);
   const d = t();
+  if (!EXERCISES.length) {
+    html('exGrid', `<div class="empty-state">
+      <div class="empty-state-icon">⚠</div>
+      <p class="empty-state-text">${lang === 'hi'
+        ? 'व्यायाम लोड नहीं हो सके। जाँचें कि बैकएंड चल रहा है।'
+        : 'Could not load exercises. Check that the backend is running.'}</p>
+    </div>`);
+    return;
+  }
+
+  const filtered = currentCat === 'all'
+    ? EXERCISES
+    : EXERCISES.filter(e => e.category === currentCat);
+
   html('exGrid', filtered.map(ex => `
     <div class="ex-card">
       <div class="ex-banner">
-        ${catIcon(ex.cat)}
-        <span class="diff-tag ${ex.diff}">${ex.diff}</span>
+        <svg class="pv-figure ex-thumb" data-slug="${esc(ex.slug)}" viewBox="0 0 100 100" aria-hidden="true"></svg>
+        <span class="view-tag">${ex.camera_view === 'side'
+          ? (lang === 'hi' ? '↔ बगल से' : '↔ Side view')
+          : (lang === 'hi' ? '⊙ सामने से' : '⊙ Front view')}</span>
+        <span class="diff-tag ${esc(ex.difficulty)}">${esc(ex.difficulty)}</span>
       </div>
       <div class="ex-body">
-        <div class="ex-name">${lang==='hi' ? ex.nameHi : ex.name}</div>
-        <div class="ex-part">${ex.part} · ${ex.cat.toUpperCase()}</div>
-        <div class="ex-desc">${lang==='hi' ? ex.descHi : ex.desc}</div>
+        <div class="ex-name">${esc(tr(ex, 'name'))}</div>
+        <div class="ex-part">${esc(ex.body_part)} · ${esc(ex.category.toUpperCase())}</div>
+        <div class="ex-desc">${esc(tr(ex, 'description'))}</div>
         <div class="ex-stats">
-          <span>🎯 ${ex.reps} reps</span>
-          <span>⏱ ${ex.sec}s</span>
+          <span>🎯 ${ex.target_reps} ${ex.pose_mode === 'hold'
+            ? (lang === 'hi' ? 'होल्ड' : 'holds') : 'reps'}</span>
+          <span>⏱ ${ex.duration_seconds}s</span>
         </div>
-        <button class="btn btn-primary btn-sm" style="margin-top:1rem;width:100%"
-          onclick="startSession('${ex.slug}')">${d.startSession}</button>
+        <div class="ex-actions">
+          <button class="btn btn-outline btn-sm" onclick="openPreview('${esc(ex.slug)}')">
+            ${lang === 'hi' ? '👁 कैसे करें' : '👁 How to'}
+          </button>
+          <button class="btn btn-primary btn-sm" onclick="startSession('${esc(ex.slug)}')">
+            ${esc(d.startSession)}
+          </button>
+        </div>
       </div>
     </div>`).join(''));
+
+  // Draw the still thumbnail on each card from the same keyframes the
+  // preview animates, so the card and the demo always match.
+  document.querySelectorAll('#exGrid .ex-thumb').forEach(svg => {
+    const ex = EXERCISES.find(e => e.slug === svg.dataset.slug);
+    if (ex && ex.preview) Preview.still(svg, ex, 'end');
+  });
 }
 
 function catIcon(cat) {
-  return { back:'🔙', knee:'🦵', shoulder:'💪', neck:'🧍', posture:'🧘' }[cat] || '🏋️';
+  return { back: '🔙', knee: '🦵', hip: '🦴', shoulder: '💪',
+           neck: '🧍', posture: '🧘' }[cat] || '🏋️';
 }
 
 /* ══════════════════════════════════════════════════
-   SESSION MODAL
+   EXERCISE PREVIEW  (shown before the camera opens)
 ══════════════════════════════════════════════════ */
-function startSession(slug) {
-  const ex = EXERCISES.find(e => e.slug === slug) || EXERCISES[0];
-  sessionReps = 0; sessionSeconds = 0;
-  if (sessionTimer) clearInterval(sessionTimer);
+let stopPreviewAnimation = null;
 
-  set('sessionTitle', lang==='hi' ? ex.nameHi : ex.name);
-  set('hudReps', `0 / ${ex.reps}`);
-  set('hudQuality', '—');
-  set('hudTime', '0s');
-  set('sessionFeedback', '🟢 Ready — keep camera steady');
-  $('sessionFeedback').style.background = 'rgba(14,165,164,.92)';
+function openPreview(slug) {
+  const ex = EXERCISES.find(e => e.slug === slug);
+  if (!ex) return;
 
-  $('sessionModal').classList.add('open');
+  set('previewTitle', tr(ex, 'name'));
+  set('previewSub', tr(ex, 'description'));
+  set('previewFigureLabel',
+      `${tr(ex, 'name')} — ${lang === 'hi' ? 'गति का प्रदर्शन' : 'movement demonstration'}`);
+  set('previewMotionLabel', lang === 'hi' ? 'गति का प्रदर्शन' : 'Movement demonstration');
+  set('previewStepsLabel', lang === 'hi' ? 'कैसे करें' : 'How to do it');
+  set('previewMistakesLabel', lang === 'hi' ? 'इनसे बचें' : 'Avoid these');
+  set('previewBackBtn', lang === 'hi' ? 'वापस' : 'Back');
+  set('previewStartBtn', lang === 'hi' ? 'कैमरे के साथ शुरू करें ▶' : 'Start with Camera ▶');
 
-  const feedbacks = lang === 'hi'
-    ? ['🟢 उत्कृष्ट मुद्रा!', '🟢 शानदार गहराई!', '⚠️ पीठ सीधी रखें', '🟢 बढ़िया रेंज!', '⚠️ धीमी गति रखें']
-    : ['🟢 Excellent posture!', '🟢 Great depth!', '⚠️ Keep your back straight', '🟢 Perfect range!', '⚠️ Control the tempo'];
+  const isHold = ex.pose_mode === 'hold';
+  html('previewMeta', `
+    <span class="meta-pill">${catIcon(ex.category)} ${esc(ex.body_part)}</span>
+    <span class="meta-pill">🎯 ${ex.target_reps} ${isHold
+      ? (lang === 'hi' ? 'होल्ड' : 'holds') : (lang === 'hi' ? 'दोहराव' : 'reps')}</span>
+    <span class="meta-pill">⏱ ${ex.duration_seconds}s</span>
+    <span class="meta-pill diff-${esc(ex.difficulty)}">${esc(ex.difficulty)}</span>
+  `);
 
-  sessionTimer = setInterval(() => {
-    sessionSeconds++;
-    set('hudTime', sessionSeconds + 's');
+  const steps = (lang === 'hi' ? ex.steps_hi : ex.steps) || [];
+  html('previewSteps', steps.map(s => `<li>${esc(s)}</li>`).join(''));
 
-    if (sessionSeconds % 3 === 0 && sessionReps < ex.reps) {
-      sessionReps++;
-      const q = Math.floor(85 + Math.random() * 14);
-      set('hudReps', `${sessionReps} / ${ex.reps}`);
-      set('hudQuality', q + '%');
+  const mistakes = (lang === 'hi' ? ex.mistakes_hi : ex.mistakes) || [];
+  html('previewMistakes', mistakes.map(m => `<li>${esc(m)}</li>`).join(''));
 
-      const fb = feedbacks[Math.floor(Math.random() * feedbacks.length)];
-      set('sessionFeedback', fb);
-      $('sessionFeedback').style.background = fb.startsWith('⚠') ? 'rgba(234,179,8,.92)' : 'rgba(14,165,164,.92)';
-    }
+  // Camera placement is not a detail: a sagittal movement measured from the
+  // front is nearly flat, which is what makes an exercise "not detect".
+  html('previewCameraHint', ex.camera_view === 'side'
+    ? `<strong>${lang === 'hi' ? '📷 कैमरा बगल में रखें' : '📷 Place the camera to your side'}</strong>
+       ${lang === 'hi'
+         ? 'यह गति बगल से दिखती है। कैमरे के सामने न खड़े हों — बगल में मुड़कर पूरा शरीर फ़्रेम में रखें।'
+         : 'This movement is visible from the side. Turn side-on to the camera and keep your whole body in frame.'}`
+    : `<strong>${lang === 'hi' ? '📷 कैमरे के सामने खड़े हों' : '📷 Face the camera'}</strong>
+       ${lang === 'hi'
+         ? 'यह गति सामने से दिखती है। कैमरे की ओर मुँह करके पूरा शरीर फ़्रेम में रखें।'
+         : 'This movement is visible from the front. Face the camera with your whole body in frame.'}`);
 
-    if (sessionReps >= ex.reps) {
-      clearInterval(sessionTimer);
-      set('sessionFeedback', lang==='hi' ? '🎉 सत्र पूर्ण! डेटा सहेजा जा रहा है…' : '🎉 Session Complete! Saving data…');
-      $('sessionFeedback').style.background = 'rgba(99,102,241,.92)';
+  $('previewStartBtn').onclick = () => { closePreview(); startSession(slug); };
 
-      // Log session
-      sessions.unshift({ id: Date.now(), name: ex.name, reps: ex.reps, target: ex.reps, quality: Math.floor(88 + Math.random()*11), rom: Math.floor(110 + Math.random()*20), sec: sessionSeconds, errors: sessionReps % 4 === 0 ? ['Minor form deviation'] : [], date: new Date().toISOString() });
+  if (stopPreviewAnimation) stopPreviewAnimation();
+  stopPreviewAnimation = Preview.animate($('previewFigure'), ex);
 
-      setTimeout(() => { closeSession(); showView('analytics'); }, 1800);
-    }
-  }, 1000);
+  $('previewModal').classList.add('open');
 }
 
-function closeSession() {
-  if (sessionTimer) clearInterval(sessionTimer);
+function closePreview() {
+  // Stop the rAF loop, otherwise a hidden modal keeps repainting forever.
+  if (stopPreviewAnimation) { stopPreviewAnimation(); stopPreviewAnimation = null; }
+  $('previewModal').classList.remove('open');
+}
+
+/* ══════════════════════════════════════════════════
+   LIVE SESSION (camera + pose tracking)
+══════════════════════════════════════════════════ */
+async function startSession(slug) {
+  if (!API.isLoggedIn()) {
+    toast(lang === 'hi'
+      ? 'सत्र सहेजने के लिए कृपया लॉगिन करें।'
+      : 'Please log in so your session can be saved.', 'warn');
+    openAuth();
+    return;
+  }
+
+  const ex = EXERCISES.find(e => e.slug === slug);
+  if (!ex) return;
+  liveExercise = ex;
+
+  set('sessionTitle', tr(ex, 'name'));
+  set('hudReps', `0 / ${ex.target_reps}`);
+  set('hudQuality', '—');
+  set('hudTime', '0s');
+  set('sessionFeedback', lang === 'hi' ? 'तैयार हो रहे हैं…' : 'Getting ready…');
+  $('sessionFeedback').style.background = 'rgba(14,165,164,.92)';
+  $('sessionError').style.display = 'none';
+  $('sessionLoading').style.display = 'flex';
+  $('sessionModal').classList.add('open');
+
+  try {
+    const config = await API.poseConfig(slug);
+
+    if (!window.PhysioPose) {
+      throw new Error(lang === 'hi'
+        ? 'पोज़ मॉडल लोड नहीं हुआ। इंटरनेट कनेक्शन जाँचें।'
+        : 'Pose model failed to load. Check your internet connection.');
+    }
+
+    liveSession = window.PhysioPose.createSession({
+      video: $('sessionVideo'),
+      canvas: $('sessionCanvas'),
+      config,
+      lang,
+      onUpdate: updateHud,
+      onComplete: finishSession,
+    });
+
+    await liveSession.start();
+    $('sessionLoading').style.display = 'none';
+    set('sessionInstructions', lang === 'hi' ? config.cue_hi : config.cue_en);
+  } catch (err) {
+    showSessionError(err);
+  }
+}
+
+function showSessionError(err) {
+  $('sessionLoading').style.display = 'none';
+  $('sessionError').style.display = 'flex';
+
+  // getUserMedia failures are the common case and deserve a real explanation.
+  let message;
+  if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
+    message = lang === 'hi'
+      ? 'कैमरे की अनुमति नहीं मिली। ब्राउज़र सेटिंग्स में कैमरा चालू करें और फिर से कोशिश करें।'
+      : 'Camera permission was denied. Allow camera access in your browser settings and try again.';
+  } else if (err && err.name === 'NotFoundError') {
+    message = lang === 'hi'
+      ? 'कोई कैमरा नहीं मिला। कृपया वेबकैम कनेक्ट करें।'
+      : 'No camera found. Please connect a webcam.';
+  } else if (err && err.name === 'NotReadableError') {
+    message = lang === 'hi'
+      ? 'कैमरा किसी अन्य ऐप द्वारा उपयोग में है। उसे बंद करके फिर से कोशिश करें।'
+      : 'The camera is in use by another app. Close it and try again.';
+  } else {
+    message = (err && err.message) || 'Could not start the session.';
+  }
+  set('sessionErrorText', message);
+}
+
+function updateHud({ reps, target, seconds, quality, feedback, tone }) {
+  set('hudReps', `${reps} / ${target}`);
+  set('hudTime', seconds + 's');
+  set('hudQuality', quality + '%');
+  $('hudQuality').style.color = quality >= 80 ? '#5eead4' : '#fbbf24';
+
+  const icon = tone === 'warn' ? '⚠️' : '🟢';
+  set('sessionFeedback', `${icon} ${feedback}`);
+  $('sessionFeedback').style.background =
+    tone === 'warn' ? 'rgba(234,179,8,.92)' : 'rgba(14,165,164,.92)';
+}
+
+/** Target reps reached: send the keypoint timeline for authoritative scoring. */
+async function finishSession(frames) {
+  set('sessionFeedback', lang === 'hi'
+    ? '🎉 सत्र पूर्ण! विश्लेषण हो रहा है…'
+    : '🎉 Session complete! Analysing…');
+  $('sessionFeedback').style.background = 'rgba(99,102,241,.92)';
+
+  await saveSession(frames, true);
+  closeSession();
+  showView('analytics');
+}
+
+async function saveSession(frames, completed) {
+  if (!frames.length) return null;
+  try {
+    const saved = await API.submitSession({
+      exercise_slug: liveExercise.slug,
+      frames,
+      completed,
+      lang,
+    });
+    const summary = lang === 'hi'
+      ? `सहेजा गया: ${saved.reps} दोहराव, गुणवत्ता ${saved.quality}%`
+      : `Saved: ${saved.reps} reps, ${saved.quality}% form quality`;
+    toast(summary, 'success');
+    return saved;
+  } catch (err) {
+    toast(lang === 'hi'
+      ? `सत्र सहेजा नहीं जा सका: ${err.message}`
+      : `Could not save session: ${err.message}`);
+    return null;
+  }
+}
+
+/** Stopping early still records the work done, flagged as incomplete. */
+async function closeSession() {
+  const session = liveSession;
+  liveSession = null;
+
+  if (session) {
+    session.stop();                       // releases the camera immediately
+    const frames = session.getFrames();
+    // Only worth saving if there is enough signal to analyse (~2s at 30fps).
+    if (frames.length > 60 && session.getReps() > 0) {
+      await saveSession(frames, false);
+    }
+  }
   $('sessionModal').classList.remove('open');
 }
 
 /* ══════════════════════════════════════════════════
    PLAN
 ══════════════════════════════════════════════════ */
-function generatePlan() {
+async function generatePlan() {
   if (!currentDiag) return;
-  const condition = lang==='hi' ? currentDiag.conditionHi : currentDiag.condition;
-  activePlan = {
-    condition,
-    title: lang==='hi' ? '14-दिवसीय लक्षित रिकवरी योजना' : '14-Day Targeted Recovery Plan',
-    exercises: EXERCISES.filter(e => e.cat === currentDiag.planCat).slice(0,3).map(ex => ({
-      name: lang==='hi' ? ex.nameHi : ex.name,
-      slug: ex.slug, sets: 3, reps: ex.reps,
-      time: lang==='hi' ? 'सुबह' : 'Morning'
-    })),
-    diet: [
-      { meal: lang==='hi'?'नाश्ता':'Breakfast',  items: lang==='hi'?'ओट्स, बेरीज, अलसी के बीज':'Oatmeal with berries & chia seeds', note: lang==='hi'?'ओमेगा-3 से भरपूर':'Rich in Omega-3' },
-      { meal: lang==='hi'?'दोपहर':'Lunch',        items: lang==='hi'?'दाल, ब्राउन राइस, पालक':'Lentil soup, brown rice & spinach',  note: lang==='hi'?'उच्च प्रोटीन':'High Protein & Calcium' },
-      { meal: lang==='hi'?'रात':'Dinner',          items: lang==='hi'?'हरी सब्जियां, हल्दी दूध':'Grilled veg with tofu & turmeric milk', note: lang==='hi'?'ऊतक मरम्मत':'Promotes tissue repair' },
-    ],
-    routine: [
-      { time: '08:00', act: lang==='hi'?'सुबह का हल्का खिंचाव':'Morning gentle stretching & hydration' },
-      { time: '14:00', act: lang==='hi'?'मुद्रा जाँच + 5-मिनट सैर':'Postural check & 5-min walk' },
-      { time: '20:30', act: lang==='hi'?'AI निर्देशित पोज़ सत्र (15 मिनट)':'AI Guided pose session (15 mins)' },
-    ],
-  };
-  showView('plan');
+  if (!API.isLoggedIn()) {
+    toast(lang === 'hi'
+      ? 'योजना सहेजने के लिए कृपया लॉगिन करें।'
+      : 'Please log in to save your plan.', 'warn');
+    openAuth();
+    return;
+  }
+
+  const btn = $('genPlanBtn');
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = lang === 'hi' ? 'बना रहे हैं…' : 'Generating…';
+
+  try {
+    const plan = await API.createPlan(lang);
+    activePlan = plan.content;
+    activePlan.id = plan.id;
+    showView('plan');
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
 }
 
 function renderPlan() {
@@ -675,21 +900,22 @@ function renderPlan() {
     html('planContainer', `
       <div class="empty-state">
         <div class="empty-state-icon">📋</div>
-        <p class="empty-state-text">${d.planNone}</p>
-        <button class="btn btn-primary" style="margin-top:1.25rem" onclick="showView('assistant')">${d.planNoneBtn}</button>
+        <p class="empty-state-text">${esc(d.planNone)}</p>
+        <button class="btn btn-primary" style="margin-top:1.25rem" onclick="showView('assistant')">${esc(d.planNoneBtn)}</button>
       </div>`);
     return;
   }
+
   html('planContainer', `
     <div class="plan-banner">
-      <div class="plan-banner-condition">${d.planCondition}: ${activePlan.condition}</div>
-      <div class="plan-banner-title">${activePlan.title}</div>
-      <div class="plan-banner-sub">${d.planGenNote}</div>
+      <div class="plan-banner-condition">${esc(d.planCondition)}: ${esc(tr(activePlan, 'condition'))}</div>
+      <div class="plan-banner-title">${esc(tr(activePlan, 'title'))}</div>
+      <div class="plan-banner-sub">${esc(d.planGenNote)}</div>
     </div>
     <div class="tab-row">
-      <button class="tab-btn active" id="tabEx"      onclick="planTab('ex',this)">${d.planTabEx}</button>
-      <button class="tab-btn"        id="tabDiet"    onclick="planTab('diet',this)">${d.planTabDiet}</button>
-      <button class="tab-btn"        id="tabRoutine" onclick="planTab('routine',this)">${d.planTabRoutine}</button>
+      <button class="tab-btn active" id="tabEx"      onclick="planTab('ex',this)">${esc(d.planTabEx)}</button>
+      <button class="tab-btn"        id="tabDiet"    onclick="planTab('diet',this)">${esc(d.planTabDiet)}</button>
+      <button class="tab-btn"        id="tabRoutine" onclick="planTab('routine',this)">${esc(d.planTabRoutine)}</button>
     </div>
     <div id="planTabBody">${renderPlanEx()}</div>
   `);
@@ -704,109 +930,154 @@ function planTab(tab, btn) {
 
 function renderPlanEx() {
   const d = t();
-  return activePlan.exercises.map(ex => `
-    <div class="plan-ex-item">
-      <div>
-        <div class="plan-ex-name">${ex.name}</div>
-        <div class="plan-ex-meta">${ex.time} · ${ex.sets} sets × ${ex.reps} reps</div>
+  // Weeks progress in difficulty, so show them as separate blocks.
+  return (activePlan.weeks || []).map(week => `
+    <div class="plan-week">
+      <div class="plan-week-head">
+        <span class="plan-week-num">${lang === 'hi' ? 'सप्ताह' : 'Week'} ${week.week}</span>
+        <span class="plan-week-focus">${esc(tr(week, 'focus'))}</span>
       </div>
-      <button class="btn btn-primary btn-sm" onclick="startSession('${ex.slug}')">${d.startBtn}</button>
+      ${week.exercises.map(ex => `
+        <div class="plan-ex-item">
+          <div>
+            <div class="plan-ex-name">${esc(tr(ex, 'name'))}</div>
+            <div class="plan-ex-meta">${esc(tr(ex, 'time_of_day'))} · ${ex.sets} sets × ${ex.reps} reps</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="startSession('${esc(ex.slug)}')">${esc(d.startBtn)}</button>
+        </div>`).join('')}
     </div>`).join('');
 }
 
 function renderPlanDiet() {
-  return `<div class="diet-grid">${activePlan.diet.map(d => `
+  return `<div class="diet-grid">${(activePlan.diet || []).map(item => `
     <div class="diet-card">
-      <div class="diet-meal">${d.meal}</div>
-      <div class="diet-items">${d.items}</div>
-      <div class="diet-note">💡 ${d.note}</div>
+      <div class="diet-meal">${esc(tr(item, 'meal'))}</div>
+      <div class="diet-items">${esc(tr(item, 'items'))}</div>
+      <div class="diet-note">💡 ${esc(tr(item, 'note'))}</div>
     </div>`).join('')}</div>`;
 }
 
 function renderPlanRoutine() {
-  return `<div class="timeline">${activePlan.routine.map(r => `
+  return `<div class="timeline">${(activePlan.routine || []).map(r => `
     <div class="timeline-step">
-      <div class="timeline-time">${r.time}</div>
-      <div class="timeline-act">${r.act}</div>
+      <div class="timeline-time">${esc(r.time)}</div>
+      <div class="timeline-act">${esc(tr(r, 'act'))}</div>
     </div>`).join('')}</div>`;
 }
 
 /* ══════════════════════════════════════════════════
    ANALYTICS
 ══════════════════════════════════════════════════ */
-function renderAnalytics() {
+async function renderAnalytics() {
   const d = t();
-  if (!sessions.length) {
-    html('analyticsContainer', `<div class="empty-state"><div class="empty-state-icon">📊</div><p class="empty-state-text">${d.noData}</p><button class="btn btn-primary" style="margin-top:1.25rem" onclick="showView('exercises')">${d.startSession}</button></div>`);
+
+  if (!API.isLoggedIn()) {
+    html('analyticsContainer', `
+      <div class="empty-state">
+        <div class="empty-state-icon">🔒</div>
+        <p class="empty-state-text">${lang === 'hi'
+          ? 'अपनी प्रगति देखने के लिए लॉगिन करें।'
+          : 'Log in to see your recovery progress.'}</p>
+        <button class="btn btn-primary" style="margin-top:1.25rem" onclick="openAuth()">${esc(t().authBtn)}</button>
+      </div>`);
     return;
   }
 
-  const chrono   = [...sessions].reverse();
-  const qualities= chrono.map(s => s.quality);
-  const roms     = chrono.map(s => s.rom);
-  const latestQ  = qualities[qualities.length-1] || 0;
-  const latestR  = roms[roms.length-1] || 0;
-  const delta    = qualities.length >= 2 ? latestQ - qualities[0] : 0;
+  html('analyticsContainer', `<div class="empty-state"><div class="spinner"></div></div>`);
 
-  const summaryText = lang === 'hi'
-    ? (delta >= 0 ? `आपकी फॉर्म गुणवत्ता ${Math.abs(delta)}% बेहतर हुई है। शानदार काम! 💪` : `ध्यान चाहिए — गुणवत्ता ${Math.abs(delta)}% गिरी है। धीरे चलें।`)
-    : (delta >= 0 ? `Your form quality improved by ${Math.abs(delta)}% this week. Great work! 💪`  : `Needs focus — quality dropped ${Math.abs(delta)}%. Try to go slower.`);
+  let data, sessions;
+  try {
+    [data, sessions] = await Promise.all([API.analytics(), API.sessions()]);
+  } catch (err) {
+    html('analyticsContainer', `<div class="empty-state">
+      <div class="empty-state-icon">⚠</div>
+      <p class="empty-state-text">${esc(err.message)}</p></div>`);
+    return;
+  }
+  analytics = data;
 
-  // Error counts
-  const errMap = {};
-  sessions.forEach(s => s.errors.forEach(e => { errMap[e] = (errMap[e]||0)+1; }));
-  const topErr = Object.entries(errMap).sort((a,b)=>b[1]-a[1]).slice(0,4);
+  if (!data.total_sessions) {
+    html('analyticsContainer', `<div class="empty-state">
+      <div class="empty-state-icon">📊</div>
+      <p class="empty-state-text">${esc(d.noData)}</p>
+      <button class="btn btn-primary" style="margin-top:1.25rem" onclick="showView('exercises')">${esc(d.startSession)}</button>
+    </div>`);
+    return;
+  }
+
+  const qualities = data.quality_trend.map(p => p.value);
+  const roms = data.rom_trend.map(p => p.value);
+  const summary = lang === 'hi' ? data.summary_hi : data.summary;
 
   html('analyticsContainer', `
     <div class="analytics-summary">
-      <div class="analytics-summary-label">${d.aiSummaryLabel}</div>
-      <div class="analytics-summary-text">${summaryText}</div>
+      <div class="analytics-summary-label">${esc(d.aiSummaryLabel)}</div>
+      <div class="analytics-summary-text">${esc(summary)}</div>
+    </div>
+
+    <div class="stat-strip">
+      <div class="stat-chip"><div class="stat-chip-n">${data.total_sessions}</div>
+        <div class="stat-chip-l">${lang === 'hi' ? 'कुल सत्र' : 'Sessions'}</div></div>
+      <div class="stat-chip"><div class="stat-chip-n">${data.total_reps}</div>
+        <div class="stat-chip-l">${lang === 'hi' ? 'कुल दोहराव' : 'Total reps'}</div></div>
+      <div class="stat-chip"><div class="stat-chip-n">${data.average_quality}%</div>
+        <div class="stat-chip-l">${lang === 'hi' ? 'औसत गुणवत्ता' : 'Avg quality'}</div></div>
+      <div class="stat-chip"><div class="stat-chip-n">${data.streak_days}</div>
+        <div class="stat-chip-l">${lang === 'hi' ? 'दिन की लय' : 'Day streak'}</div></div>
     </div>
 
     <div class="analytics-grid" style="margin-top:1.5rem">
       <div class="analytics-card">
         <div class="analytics-card-header">
-          <div class="analytics-card-title">${d.qualityTrend}</div>
-          <div class="analytics-big-val" style="color:var(--teal)">${latestQ}%</div>
+          <div class="analytics-card-title">${esc(d.qualityTrend)}</div>
+          <div class="analytics-big-val" style="color:var(--teal)">${data.latest_quality}%</div>
         </div>
-        ${svgLine(qualities, 100, '#0ea5a4')}
-        <div style="font-size:.75rem;color:var(--slate-400);margin-top:.5rem">${sessions.length} sessions tracked</div>
+        ${qualities.length ? svgLine(qualities, 100, '#0ea5a4') : emptyChart()}
+        <div class="chart-foot">${qualities.length} ${lang === 'hi' ? 'ट्रैक किए गए सत्र' : 'tracked sessions'}</div>
       </div>
       <div class="analytics-card">
         <div class="analytics-card-header">
-          <div class="analytics-card-title">${d.romTrend}</div>
-          <div class="analytics-big-val" style="color:var(--indigo)">${latestR}°</div>
+          <div class="analytics-card-title">${esc(d.romTrend)}</div>
+          <div class="analytics-big-val" style="color:var(--indigo)">${Math.round(data.latest_rom)}°</div>
         </div>
-        ${svgLine(roms, 140, '#6366f1')}
-        <div style="font-size:.75rem;color:var(--slate-400);margin-top:.5rem">${sessions.length} sessions tracked</div>
+        ${roms.length ? svgLine(roms, Math.max(140, ...roms), '#6366f1') : emptyChart()}
+        <div class="chart-foot">${roms.length} ${lang === 'hi' ? 'ट्रैक किए गए सत्र' : 'tracked sessions'}</div>
       </div>
     </div>
 
     <div class="analytics-grid" style="margin-top:1.5rem">
       <div class="analytics-card">
-        <div class="analytics-card-title" style="margin-bottom:1rem">${d.errorsTitle}</div>
+        <div class="analytics-card-title" style="margin-bottom:1rem">${esc(d.errorsTitle)}</div>
         <div class="error-bar-wrap">
-          ${topErr.length ? topErr.map(([err,cnt]) => {
-            const pct = Math.round((cnt/sessions.length)*100);
-            return `<div class="error-row">
-              <div class="error-label-row"><span>${err}</span><span class="error-count">${cnt}×</span></div>
-              <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:#ef4444"></div></div>
-            </div>`;
-          }).join('') : `<p style="font-size:.88rem;color:var(--slate-400)">No posture errors logged! 🎉</p>`}
+          ${data.common_errors.length ? data.common_errors.map(err => `
+            <div class="error-row">
+              <div class="error-label-row">
+                <span>${esc(lang === 'hi' ? err.message_hi : err.message)}</span>
+                <span class="error-count">${err.count}×</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill" style="width:${Math.min(err.percent, 100)}%;background:#ef4444"></div>
+              </div>
+            </div>`).join('')
+            : `<p style="font-size:.88rem;color:var(--slate-400)">${lang === 'hi'
+                ? 'कोई मुद्रा त्रुटि दर्ज नहीं! 🎉' : 'No posture errors logged! 🎉'}</p>`}
         </div>
       </div>
       <div class="analytics-card">
-        <div class="analytics-card-title" style="margin-bottom:1rem">${d.historyTitle}</div>
+        <div class="analytics-card-title" style="margin-bottom:1rem">${esc(d.historyTitle)}</div>
         <div class="history-list">
           ${sessions.map(s => `
             <div class="history-item">
               <div>
-                <div class="history-name">${s.name}</div>
-                <div class="history-date">${new Date(s.date).toLocaleDateString(lang==='hi'?'hi-IN':'en-IN',{day:'numeric',month:'short'})}</div>
+                <div class="history-name">${esc(s.exercise_name)}</div>
+                <div class="history-date">${new Date(s.created_at).toLocaleDateString(
+                  lang === 'hi' ? 'hi-IN' : 'en-IN', { day: 'numeric', month: 'short' })}</div>
               </div>
               <div>
-                <div class="history-score">${s.quality}% Form</div>
-                <div class="history-reps">${s.reps}/${s.target} reps</div>
+                <div class="history-score">${s.tracked_ratio >= 0.6
+                  ? `${s.quality}% ${lang === 'hi' ? 'फॉर्म' : 'Form'}`
+                  : `<span class="untracked">${lang === 'hi' ? 'बिना ट्रैकिंग' : 'Untracked'}</span>`}</div>
+                <div class="history-reps">${s.reps}/${s.target_reps} reps</div>
               </div>
             </div>`).join('')}
         </div>
@@ -815,17 +1086,27 @@ function renderAnalytics() {
   `);
 }
 
+function emptyChart() {
+  return `<div class="chart-empty">${lang === 'hi'
+    ? 'ट्रैक किया गया कोई सत्र नहीं'
+    : 'No tracked sessions yet'}</div>`;
+}
+
 function svgLine(data, max, color) {
   if (!data.length) return '';
-  const W=340, H=130, P=14;
-  const coords = data.map((v,i)=>({
-    x: data.length>1 ? P+(i/(data.length-1))*(W-P*2) : W/2,
-    y: H-P-Math.min(v/max,1)*(H-P*2)
+  const W = 340, H = 130, P = 14;
+  const coords = data.map((v, i) => ({
+    x: data.length > 1 ? P + (i / (data.length - 1)) * (W - P * 2) : W / 2,
+    y: H - P - Math.min(v / max, 1) * (H - P * 2),
   }));
-  const pts   = coords.map(c=>`${c.x},${c.y}`).join(' ');
-  const fill  = `M${coords[0].x},${H-P} `+coords.map(c=>`L${c.x},${c.y}`).join(' ')+` L${coords[coords.length-1].x},${H-P} Z`;
-  const dots  = coords.map(c=>`<circle cx="${c.x}" cy="${c.y}" r="4" fill="${color}" stroke="#fff" stroke-width="2"/>`).join('');
-  const gid   = 'g'+color.replace('#','');
+  const pts  = coords.map(c => `${c.x},${c.y}`).join(' ');
+  const fill = `M${coords[0].x},${H - P} ` +
+    coords.map(c => `L${c.x},${c.y}`).join(' ') +
+    ` L${coords[coords.length - 1].x},${H - P} Z`;
+  const dots = coords.map(c =>
+    `<circle cx="${c.x}" cy="${c.y}" r="4" fill="${color}" stroke="#fff" stroke-width="2"/>`
+  ).join('');
+  const gid = 'g' + color.replace('#', '');
   return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">
     <defs>
       <linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
@@ -833,8 +1114,8 @@ function svgLine(data, max, color) {
         <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
       </linearGradient>
     </defs>
-    <line x1="${P}" y1="${H*.33}" x2="${W-P}" y2="${H*.33}" stroke="#f1f5f9" stroke-width="1"/>
-    <line x1="${P}" y1="${H*.66}" x2="${W-P}" y2="${H*.66}" stroke="#f1f5f9" stroke-width="1"/>
+    <line x1="${P}" y1="${H * .33}" x2="${W - P}" y2="${H * .33}" stroke="#f1f5f9" stroke-width="1"/>
+    <line x1="${P}" y1="${H * .66}" x2="${W - P}" y2="${H * .66}" stroke="#f1f5f9" stroke-width="1"/>
     <path d="${fill}" fill="url(#${gid})"/>
     <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
     ${dots}
@@ -844,39 +1125,82 @@ function svgLine(data, max, color) {
 /* ══════════════════════════════════════════════════
    AUTH
 ══════════════════════════════════════════════════ */
-function openAuth()  { $('authModal').classList.add('open'); }
+function openAuth() {
+  $('authError').style.display = 'none';
+  $('authModal').classList.add('open');
+  $('authEmail').focus();
+}
+
 function closeAuth() { $('authModal').classList.remove('open'); }
 
 function switchAuthTab(mode) {
   authMode = mode;
-  $('tabLogin').classList.toggle('active',  mode==='login');
-  $('tabSignup').classList.toggle('active', mode==='signup');
-  $('nameField').style.display  = mode==='signup' ? 'block' : 'none';
-  $('authSubmit').textContent   = mode==='login'  ? 'Login' : 'Sign Up';
+  $('tabLogin').classList.toggle('active',  mode === 'login');
+  $('tabSignup').classList.toggle('active', mode === 'signup');
+  $('nameField').style.display = mode === 'signup' ? 'block' : 'none';
+  $('authPwHint').style.display = mode === 'signup' ? 'block' : 'none';
+  $('authError').style.display = 'none';
+  $('authSubmit').textContent = mode === 'login' ? 'Login' : 'Sign Up';
+  $('authPassword').autocomplete =
+    mode === 'login' ? 'current-password' : 'new-password';
 }
 
-function handleAuth(e) {
+async function handleAuth(e) {
   e.preventDefault();
-  const name  = authMode==='signup' ? ($('authName').value || 'User') : ($('authEmail').value.split('@')[0]);
-  const email = $('authEmail').value;
-  user = { name, email };
-  localStorage.setItem('pm_user', JSON.stringify(user));
-  closeAuth();
-  renderAll();
+  const submit = $('authSubmit');
+  const errorBox = $('authError');
+  errorBox.style.display = 'none';
+
+  const email = $('authEmail').value.trim();
+  const password = $('authPassword').value;
+  const name = $('authName').value.trim();
+
+  if (authMode === 'signup' && !name) {
+    errorBox.textContent = 'Please enter your name';
+    errorBox.style.display = 'block';
+    return;
+  }
+
+  submit.disabled = true;
+  const label = submit.textContent;
+  submit.textContent = authMode === 'login' ? 'Logging in…' : 'Creating account…';
+
+  try {
+    user = authMode === 'signup'
+      ? await API.signup(name, email, password, lang)
+      : await API.login(email, password);
+
+    $('authPassword').value = '';       // do not leave it sitting in the DOM
+    closeAuth();
+    renderAll();
+    await refreshPlan();
+    toast(lang === 'hi' ? `स्वागत है, ${user.name}!` : `Welcome, ${user.name}!`,
+          'success');
+  } catch (err) {
+    errorBox.textContent = err.message;
+    errorBox.style.display = 'block';
+  } finally {
+    submit.disabled = false;
+    submit.textContent = label;
+  }
 }
 
 function logout() {
+  API.logout();
   user = null;
-  localStorage.removeItem('pm_user');
+  activePlan = null;
+  currentDiag = null;
+  analytics = null;
   renderAll();
+  showView('landing');
 }
 
 // Close modals on backdrop click
-['authModal','sessionModal'].forEach(id => {
+['authModal','sessionModal','previewModal'].forEach(id => {
   $(id).addEventListener('click', e => {
-    if (e.target === $(id)) {
-      if (id === 'sessionModal') closeSession();
-      else closeAuth();
-    }
+    if (e.target !== $(id)) return;
+    if (id === 'sessionModal')      closeSession();
+    else if (id === 'previewModal') closePreview();
+    else                            closeAuth();
   });
 });
