@@ -238,6 +238,31 @@ def test_submit_tracked_session(client, auth):
     assert body["tracked_ratio"] > 0.9
 
 
+def test_anonymous_session_is_scored_but_not_stored(client):
+    """No account: the analysis still runs, nothing is written."""
+    response = client.post("/api/sessions", json={
+        "exercise_slug": "terminal-knee-ext",
+        "frames": make_frames(4),
+        "completed": True,
+    })
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["reps"] == 4                 # same score a logged-in user gets
+    assert body["quality"] > 0
+    assert body["id"] is None                # the tell that nothing was saved
+
+
+def test_anonymous_session_does_not_leak_into_a_users_history(client, auth):
+    """An anonymous submission must not appear in anyone's session list."""
+    client.post("/api/sessions", json={
+        "exercise_slug": "terminal-knee-ext", "frames": make_frames(4),
+        "completed": True,
+    })
+    listed = client.get("/api/sessions", headers=auth)
+    assert listed.status_code == 200
+    assert listed.json() == []
+
+
 def test_untracked_session_is_flagged(client, auth):
     response = client.post("/api/sessions", headers=auth, json={
         "exercise_slug": "chin-tuck", "frames": [], "client_reps": 10,

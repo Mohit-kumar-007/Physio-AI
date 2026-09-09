@@ -72,6 +72,7 @@ const T = {
       { key: 'shoulder', label: '💪 Shoulder' },
       { key: 'neck',     label: '🧍 Neck' },
       { key: 'posture',  label: '🧘 Posture' },
+      { key: 'strength', label: '🏋️ Gym & Strength' },
     ],
     planTitle: 'My Recovery Plan',
     planNone:  'No plan yet. Run an assessment with the AI Assistant first.',
@@ -91,6 +92,8 @@ const T = {
     historyTitle: 'Session History',
     noData: 'No sessions recorded yet. Complete an exercise session to start tracking.',
     sessionReps: 'Reps', sessionQual: 'Form Quality', sessionTime: 'Time',
+    sessionSet: 'Set', sessionDone: 'Session complete', sessionUnscored:
+      'Session finished, but it could not be scored. Check your connection.',
     hudInstruct: 'Position yourself in front of the camera. Follow along and maintain proper form throughout.',
     footerDisclaimer: 'AI advice is for informational guidance only. Always consult a professional.',
   },
@@ -157,6 +160,7 @@ const T = {
       { key: 'shoulder', label: '💪 कंधा' },
       { key: 'neck',     label: '🧍 गर्दन' },
       { key: 'posture',  label: '🧘 मुद्रा' },
+      { key: 'strength', label: '🏋️ जिम और ताक़त' },
     ],
     planTitle: 'मेरी रिकवरी योजना',
     planNone:  'अभी कोई योजना नहीं। AI सहायक के साथ मूल्यांकन करें।',
@@ -176,6 +180,8 @@ const T = {
     historyTitle: 'सत्र इतिहास',
     noData: 'अभी कोई डेटा नहीं। व्यायाम सत्र पूरा करें।',
     sessionReps: 'दोहराव', sessionQual: 'फॉर्म गुणवत्ता', sessionTime: 'समय',
+    sessionSet: 'सेट', sessionDone: 'सत्र पूर्ण', sessionUnscored:
+      'सत्र पूरा हुआ, पर स्कोर नहीं हो सका। कनेक्शन जाँचें।',
     hudInstruct: 'कैमरे के सामने खड़े हों और सही मुद्रा में व्यायाम करें।',
     footerDisclaimer: 'AI सलाह केवल जानकारी के लिए है। हमेशा विशेषज्ञ से परामर्श लें।',
   }
@@ -206,15 +212,19 @@ async function loadExercises() {
    STATE
 ══════════════════════════════════════════════════ */
 let lang = localStorage.getItem('pm_lang') || 'en';
-let user = null;                 // resolved from the server via the stored token
 let currentView = 'landing';
 let currentCat  = 'all';
 let currentDiag = null;
 let activePlan  = null;
-let authMode    = 'login';
 let analytics   = null;          // last /api/analytics payload
 
 // Live pose session handle (from pose.js) plus the exercise it belongs to.
+// How many sets each exercise runs. The catalogue defines reps per set,
+// not sets, so this is the app-wide default -- matching the 2-3 sets the
+// planner already prescribes.
+const DEFAULT_SETS = 3;
+const REST_SECONDS = 20;
+
 let liveSession = null;
 let liveExercise = null;
 
@@ -250,30 +260,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindEvents();
   renderAll();
 
-  // Restore the signed-in user from the stored token, then load the catalogue.
-  // Both are independent, so let them run together.
-  const [me] = await Promise.all([
-    API.isLoggedIn() ? API.me().catch(() => null) : Promise.resolve(null),
-    loadExercises(),
-  ]);
-  user = me;
-  if (!user) API.logout();          // token was rejected or expired
-
+  // No accounts: nothing to restore, just load the catalogue.
+  await loadExercises();
   renderAll();
-  if (user) refreshPlan();
 });
-
-/** Pull the active plan so the My Plan tab is populated on load. */
-async function refreshPlan() {
-  try {
-    const plan = await API.activePlan();
-    activePlan = plan.content;
-    activePlan.id = plan.id;
-  } catch {
-    activePlan = null;             // 404 simply means no plan generated yet
-  }
-  if (currentView === 'plan') renderPlan();
-}
 
 function bindEvents() {
   // Nav links
@@ -285,10 +275,6 @@ function bindEvents() {
     lang = lang === 'en' ? 'hi' : 'en';
     localStorage.setItem('pm_lang', lang);
     renderAll();
-  });
-  // Auth
-  $('authBtn').addEventListener('click', () => {
-    if (user) { logout(); } else { openAuth(); }
   });
   // Chat send
   $('sendBtn').addEventListener('click', sendMessage);
@@ -328,8 +314,6 @@ function renderAll() {
   // Nav
   set('appName',    d.appName);
   set('langBtn',    d.langToggle);
-  set('authBtn',    user ? `${d.authLogout} (${user.name.split(' ')[0]})` : d.authBtn);
-  $('authBtn').className = user ? 'btn btn-sm btn-outline' : 'btn btn-sm btn-primary';
   document.querySelectorAll('.nav-link').forEach(btn => {
     const map = { landing: d.navHome, assistant: d.navAssist, exercises: d.navEx, plan: d.navPlan, analytics: d.navAnalytics };
     btn.textContent = map[btn.dataset.view] || btn.textContent;
@@ -405,6 +389,7 @@ function renderAll() {
   set('analyticsTitle', d.analyticsTitle);
   set('analyticsSub',   d.analyticsSub);
   set('hudRepLabel',    d.sessionReps);
+  set('hudSetLabel',    d.sessionSet);
   set('hudQualLabel',   d.sessionQual);
   set('hudTimeLabel',   d.sessionTime);
   set('sessionInstructions', d.hudInstruct);
@@ -538,9 +523,9 @@ function renderDiagCard() {
     ${alternatives}
   `);
 
-  set('genPlanBtn', d.genPlanBtn);
-  // Nothing to plan from until the diagnosis is solid enough to act on.
-  $('genPlanBtn').style.display = currentDiag.is_confident ? 'block' : 'none';
+  // Plan generation stores an assessment, which needs an account. Accounts
+  // are disabled, so the button stays hidden; re-enable it alongside login.
+  $('genPlanBtn').style.display = 'none';
 }
 
 function handleMic() {
@@ -662,7 +647,7 @@ function renderExercises() {
 
 function catIcon(cat) {
   return { back: '🔙', knee: '🦵', hip: '🦴', shoulder: '💪',
-           neck: '🧍', posture: '🧘' }[cat] || '🏋️';
+           neck: '🧍', posture: '🧘', strength: '🏋️' }[cat] || '🏋️';
 }
 
 /* ══════════════════════════════════════════════════
@@ -729,22 +714,16 @@ function closePreview() {
    LIVE SESSION (camera + pose tracking)
 ══════════════════════════════════════════════════ */
 async function startSession(slug) {
-  if (!API.isLoggedIn()) {
-    toast(lang === 'hi'
-      ? 'सत्र सहेजने के लिए कृपया लॉगिन करें।'
-      : 'Please log in so your session can be saved.', 'warn');
-    openAuth();
-    return;
-  }
-
   const ex = EXERCISES.find(e => e.slug === slug);
   if (!ex) return;
   liveExercise = ex;
 
   set('sessionTitle', tr(ex, 'name'));
   set('hudReps', `0 / ${ex.target_reps}`);
+  set('hudSet', `1 / ${DEFAULT_SETS}`);
   set('hudQuality', '—');
   set('hudTime', '0s');
+  $('sessionResult').style.display = 'none';
   set('sessionFeedback', lang === 'hi' ? 'तैयार हो रहे हैं…' : 'Getting ready…');
   $('sessionFeedback').style.background = 'rgba(14,165,164,.92)';
   $('sessionError').style.display = 'none';
@@ -765,6 +744,8 @@ async function startSession(slug) {
       canvas: $('sessionCanvas'),
       config,
       lang,
+      sets: DEFAULT_SETS,
+      restSeconds: REST_SECONDS,
       onUpdate: updateHud,
       onComplete: finishSession,
     });
@@ -801,8 +782,9 @@ function showSessionError(err) {
   set('sessionErrorText', message);
 }
 
-function updateHud({ reps, target, seconds, quality, feedback, tone }) {
+function updateHud({ reps, set: setNo, totalSets, target, seconds, quality, feedback, tone }) {
   set('hudReps', `${reps} / ${target}`);
+  set('hudSet', `${setNo} / ${totalSets}`);
   set('hudTime', seconds + 's');
   set('hudQuality', quality + '%');
   $('hudQuality').style.color = quality >= 80 ? '#5eead4' : '#fbbf24';
@@ -813,16 +795,46 @@ function updateHud({ reps, target, seconds, quality, feedback, tone }) {
     tone === 'warn' ? 'rgba(234,179,8,.92)' : 'rgba(14,165,164,.92)';
 }
 
-/** Target reps reached: send the keypoint timeline for authoritative scoring. */
+/** Last set done: send the keypoint timeline for authoritative scoring. */
 async function finishSession(frames) {
   set('sessionFeedback', lang === 'hi'
     ? '🎉 सत्र पूर्ण! विश्लेषण हो रहा है…'
     : '🎉 Session complete! Analysing…');
   $('sessionFeedback').style.background = 'rgba(99,102,241,.92)';
 
-  await saveSession(frames, true);
-  closeSession();
-  showView('analytics');
+  const result = await saveSession(frames, true);
+  // Clear it BEFORE showing the panel: its Done button calls closeSession(),
+  // which would otherwise submit the same frames a second time.
+  liveSession = null;
+  showSessionResult(result);
+}
+
+/** The server's numbers, shown to the patient. Nothing is stored. */
+function showSessionResult(result) {
+  const d = t();
+  let body;
+  if (!result) {
+    body = `<div style="font-weight:700">${esc(d.sessionUnscored)}</div>`;
+  } else {
+    const topError = (result.errors || []).find(e => e.id !== 'untracked');
+    const rows = [
+      [d.sessionReps, result.reps],
+      [d.sessionQual, `${result.quality}%`],
+      ['ROM', `${Math.round(result.rom_degrees)}°`],
+      [d.sessionTime, `${Math.round(result.duration_seconds)}s`],
+    ];
+    body = `
+      <div style="font-weight:800;font-size:1.05rem;margin-bottom:.6rem">${esc(d.sessionDone)}</div>
+      <div style="display:flex;gap:1.1rem;justify-content:center;flex-wrap:wrap">
+        ${rows.map(([label, value]) => `
+          <div><div style="opacity:.7;font-size:.7rem;text-transform:uppercase">${esc(label)}</div>
+          <div style="font-size:1.3rem;font-weight:900">${esc(value)}</div></div>`).join('')}
+      </div>
+      ${topError ? `<div style="margin-top:.75rem;font-size:.85rem;opacity:.9">⚠️ ${
+        esc(lang === 'hi' ? topError.message_hi : topError.message)}</div>` : ''}`;
+  }
+  html('sessionResultText', body);
+  $('sessionResult').style.display = 'flex';
 }
 
 async function saveSession(frames, completed) {
@@ -834,15 +846,11 @@ async function saveSession(frames, completed) {
       completed,
       lang,
     });
-    const summary = lang === 'hi'
-      ? `सहेजा गया: ${saved.reps} दोहराव, गुणवत्ता ${saved.quality}%`
-      : `Saved: ${saved.reps} reps, ${saved.quality}% form quality`;
-    toast(summary, 'success');
     return saved;
   } catch (err) {
     toast(lang === 'hi'
-      ? `सत्र सहेजा नहीं जा सका: ${err.message}`
-      : `Could not save session: ${err.message}`);
+      ? `सत्र स्कोर नहीं हो सका: ${err.message}`
+      : `Could not score session: ${err.message}`);
     return null;
   }
 }
@@ -860,6 +868,7 @@ async function closeSession() {
       await saveSession(frames, false);
     }
   }
+  $('sessionResult').style.display = 'none';
   $('sessionModal').classList.remove('open');
 }
 
@@ -868,11 +877,12 @@ async function closeSession() {
 ══════════════════════════════════════════════════ */
 async function generatePlan() {
   if (!currentDiag) return;
+  // Plans are stored per account, and accounts are disabled. Unreachable
+  // today (the button is hidden); kept working for when login returns.
   if (!API.isLoggedIn()) {
     toast(lang === 'hi'
-      ? 'योजना सहेजने के लिए कृपया लॉगिन करें।'
-      : 'Please log in to save your plan.', 'warn');
-    openAuth();
+      ? 'योजना के लिए खाता चाहिए।'
+      : 'Saved plans need an account.', 'warn');
     return;
   }
 
@@ -976,9 +986,8 @@ async function renderAnalytics() {
       <div class="empty-state">
         <div class="empty-state-icon">🔒</div>
         <p class="empty-state-text">${lang === 'hi'
-          ? 'अपनी प्रगति देखने के लिए लॉगिन करें।'
-          : 'Log in to see your recovery progress.'}</p>
-        <button class="btn btn-primary" style="margin-top:1.25rem" onclick="openAuth()">${esc(t().authBtn)}</button>
+          ? 'प्रगति ट्रैकिंग के लिए खाता चाहिए।'
+          : 'Progress tracking needs an account.'}</p>
       </div>`);
     return;
   }
@@ -1122,85 +1131,11 @@ function svgLine(data, max, color) {
   </svg>`;
 }
 
-/* ══════════════════════════════════════════════════
-   AUTH
-══════════════════════════════════════════════════ */
-function openAuth() {
-  $('authError').style.display = 'none';
-  $('authModal').classList.add('open');
-  $('authEmail').focus();
-}
-
-function closeAuth() { $('authModal').classList.remove('open'); }
-
-function switchAuthTab(mode) {
-  authMode = mode;
-  $('tabLogin').classList.toggle('active',  mode === 'login');
-  $('tabSignup').classList.toggle('active', mode === 'signup');
-  $('nameField').style.display = mode === 'signup' ? 'block' : 'none';
-  $('authPwHint').style.display = mode === 'signup' ? 'block' : 'none';
-  $('authError').style.display = 'none';
-  $('authSubmit').textContent = mode === 'login' ? 'Login' : 'Sign Up';
-  $('authPassword').autocomplete =
-    mode === 'login' ? 'current-password' : 'new-password';
-}
-
-async function handleAuth(e) {
-  e.preventDefault();
-  const submit = $('authSubmit');
-  const errorBox = $('authError');
-  errorBox.style.display = 'none';
-
-  const email = $('authEmail').value.trim();
-  const password = $('authPassword').value;
-  const name = $('authName').value.trim();
-
-  if (authMode === 'signup' && !name) {
-    errorBox.textContent = 'Please enter your name';
-    errorBox.style.display = 'block';
-    return;
-  }
-
-  submit.disabled = true;
-  const label = submit.textContent;
-  submit.textContent = authMode === 'login' ? 'Logging in…' : 'Creating account…';
-
-  try {
-    user = authMode === 'signup'
-      ? await API.signup(name, email, password, lang)
-      : await API.login(email, password);
-
-    $('authPassword').value = '';       // do not leave it sitting in the DOM
-    closeAuth();
-    renderAll();
-    await refreshPlan();
-    toast(lang === 'hi' ? `स्वागत है, ${user.name}!` : `Welcome, ${user.name}!`,
-          'success');
-  } catch (err) {
-    errorBox.textContent = err.message;
-    errorBox.style.display = 'block';
-  } finally {
-    submit.disabled = false;
-    submit.textContent = label;
-  }
-}
-
-function logout() {
-  API.logout();
-  user = null;
-  activePlan = null;
-  currentDiag = null;
-  analytics = null;
-  renderAll();
-  showView('landing');
-}
-
 // Close modals on backdrop click
-['authModal','sessionModal','previewModal'].forEach(id => {
+['sessionModal','previewModal'].forEach(id => {
   $(id).addEventListener('click', e => {
     if (e.target !== $(id)) return;
-    if (id === 'sessionModal')      closeSession();
-    else if (id === 'previewModal') closePreview();
-    else                            closeAuth();
+    if (id === 'sessionModal') closeSession();
+    else                       closePreview();
   });
 });

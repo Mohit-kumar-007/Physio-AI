@@ -8,6 +8,19 @@ tracking counts reps and corrects your form.
 - **Backend** — Python / FastAPI + SQLite (`backend/`)
 - **Pose tracking** — MediaPipe Pose, running **in the browser**
 
+### Accounts are off
+
+The shipped UI has **no signup or login**. Anyone can open an exercise and
+train immediately: the browser counts reps and sets, the server scores the
+session, and the result is shown and then discarded. Nothing personal is
+stored, which is also why the deployment needs no database.
+
+The account features still exist server-side and are still tested — saved
+history, recovery plans and the analytics trends all need a user to attach
+to, so their tabs are hidden rather than deleted. Re-enabling them means
+restoring the nav entries and the auth modal in `index.html`, and giving the
+service real storage (see the deploy section).
+
 ## Run it
 
 ```bash
@@ -60,13 +73,13 @@ saved result cannot disagree. The server's number is the one that is stored.
 | POST | `/api/auth/signup` | – | Create account (bcrypt + JWT) |
 | POST | `/api/auth/login` | – | Log in |
 | GET | `/api/auth/me` | ✓ | Current user |
-| GET | `/api/exercises` | – | Catalogue (22 exercises), `?category=` filter |
+| GET | `/api/exercises` | – | Catalogue (29 exercises), `?category=` filter |
 | GET | `/api/exercises/{slug}/pose-config` | – | Biomechanics rules for the browser |
 | POST | `/api/assess` | optional | Symptoms → condition + confidence |
 | GET | `/api/assessments` | ✓ | Assessment history |
 | POST | `/api/plans` | ✓ | Generate plan from latest assessment |
 | GET | `/api/plans/active` | ✓ | Current plan |
-| POST | `/api/sessions` | ✓ | Submit keypoint timeline, get scored (returns `adaptive`, `target_met`) |
+| POST | `/api/sessions` | optional | Submit keypoint timeline, get scored. Stored only when logged in; anonymous submissions are scored and returned with `id: null` |
 | GET | `/api/sessions` | ✓ | Session history |
 | GET | `/api/analytics` | ✓ | Trends, streak, common form errors |
 | POST | `/api/reports` | optional | Upload MRI/X-ray, extract findings |
@@ -91,9 +104,16 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 
 ## Exercise catalogue
 
-22 exercises across six categories: back, knee, hip, shoulder, neck, posture.
-Each one carries its own biomechanics config, step-by-step instructions in both
-languages, common mistakes, and an animated stick-figure preview.
+29 exercises across seven categories: back, knee, hip, shoulder, neck, posture,
+strength. Each one carries its own biomechanics config, step-by-step instructions
+in both languages, common mistakes, and an animated stick-figure preview.
+
+The first six are clinical rehab and live in `physio/exercise_data.py`. The
+seventh, `strength`, is everyday gym work - push-ups, pull-ups, dumbbell curls,
+shoulder press, lunges, sit-ups and a plank hold - and lives in
+`physio/strength_data.py`. It runs through the same pose engine and shows up in
+the same analytics, but the planner never prescribes it: recovery plans are built
+from the diagnosed body part, and `strength` is not one.
 
 Open `exercise-previews.html` to see every preview keyframe on one page.
 

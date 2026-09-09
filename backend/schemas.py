@@ -129,7 +129,8 @@ class SessionIn(BaseModel):
 
 
 class SessionOut(BaseModel):
-    id: int
+    # None when the session was scored but not stored (no account).
+    id: int | None
     exercise_slug: str
     exercise_name: str
     reps: int

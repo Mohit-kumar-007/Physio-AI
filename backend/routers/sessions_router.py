@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, desc, select
 
-from ..auth import current_user
+from ..auth import current_user, optional_user
 from ..config import MAX_SESSION_FRAMES
 from ..db import get_session
 from ..models import ExerciseSession, User
@@ -24,8 +24,11 @@ router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 def submit_session(
     body: SessionIn,
     session: Session = Depends(get_session),
-    user: User = Depends(current_user),
+    user: User | None = Depends(optional_user),
 ) -> SessionOut:
+    """Score a keypoint timeline. Stored only when there is an account to
+    store it against; anonymous sessions are analysed and returned, never
+    written. The analysis is identical either way."""
     exercise = BY_SLUG.get(body.exercise_slug)
     if exercise is None:
         raise HTTPException(404, f"Unknown exercise: {body.exercise_slug}")
@@ -40,7 +43,7 @@ def submit_session(
         frames = [{"t": f.t, "lm": f.lm} for f in body.frames]
         analysis = analyze_session(frames, exercise["pose"])
         record = ExerciseSession(
-            user_id=user.id,
+            user_id=user.id if user else 0,
             exercise_slug=body.exercise_slug,
             exercise_name=exercise["name"],
             reps=analysis.reps,
@@ -69,7 +72,7 @@ def submit_session(
                 422, "Send either pose frames or client_reps for an untracked session."
             )
         record = ExerciseSession(
-            user_id=user.id,
+            user_id=user.id if user else 0,
             exercise_slug=body.exercise_slug,
             exercise_name=exercise["name"],
             reps=body.client_reps,
@@ -80,6 +83,9 @@ def submit_session(
             errors=[{"id": "untracked", "message": "Recorded without pose tracking",
                      "message_hi": "पोज़ ट्रैकिंग के बिना दर्ज किया गया", "rate": 1.0}],
         )
+
+    if user is None:
+        return SessionOut(**record.model_dump())     # scored, deliberately not stored
 
     session.add(record)
     session.commit()

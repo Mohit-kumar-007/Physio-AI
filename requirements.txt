@@ -6,9 +6,6 @@ python-multipart==0.0.20
 PyJWT==2.10.1
 bcrypt==4.2.1
 numpy==2.2.1
-# Postgres driver. Only used when PHYSIO_DATABASE_URL points at Postgres;
-# SQLite needs no driver, so local development is unaffected.
-psycopg2-binary==2.9.10
 pypdf==5.1.0
 pillow==11.1.0
 pytesseract==0.3.13

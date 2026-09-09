@@ -631,13 +631,13 @@ main { flex: 1; }
 }
 .session-hud {
   position: absolute; top: 14px; left: 14px; right: 14px;
-  display: flex; justify-content: space-between;
+  display: flex; justify-content: space-between; gap: .45rem; flex-wrap: wrap;
   pointer-events: none;
 }
 .hud-box {
   background: rgba(15,23,42,.82); backdrop-filter: blur(8px);
   border: 1px solid rgba(255,255,255,.12);
-  border-radius: var(--r-md); padding: .6rem 1.1rem; text-align: center; color: #fff;
+  border-radius: var(--r-md); padding: .5rem .8rem; text-align: center; color: #fff;
 }
 .hud-label { font-size: .68rem; opacity: .75; text-transform: uppercase; letter-spacing: .05em; }
 .hud-val   { font-size: 1.5rem; font-weight: 900; margin-top: .1rem; }

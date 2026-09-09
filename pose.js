@@ -113,10 +113,13 @@ function axisAngleFrom(landmarks, [p1, p2], [q1, q2], visSource) {
  *   canvas     - <canvas> overlay for the skeleton
  *   config     - pose config from the API
  *   lang       - 'en' | 'hi'
- *   onUpdate   - ({reps, quality, seconds, feedback, tone}) each frame
- *   onComplete - (frames) when the target rep count is reached
+ *   sets       - how many sets to perform (default 1)
+ *   restSeconds- pause between sets
+ *   onUpdate   - ({reps, set, totalSets, resting, quality, seconds, feedback, tone})
+ *   onComplete - (frames) when the last set finishes
  */
-export function createSession({ video, canvas, config, lang, onUpdate, onComplete }) {
+export function createSession({ video, canvas, config, lang, sets = 1,
+                                restSeconds = 20, onUpdate, onComplete }) {
   const ctx = canvas.getContext('2d');
   const drawer = new DrawingUtils(ctx);
   const frames = [];
@@ -135,6 +138,17 @@ export function createSession({ video, canvas, config, lang, onUpdate, onComplet
   let highRun = 0;
   let holdStart = null;
   let holdArmed = true;
+
+  // set state
+  const totalSets = Math.max(1, sets);
+  let currentSet = 1;
+  let resting = false;
+  let restUntil = 0;
+  let restStartedAt = 0;
+  // Total time spent resting, subtracted from frame timestamps so the uploaded
+  // timeline is contiguous exercise time. Without this the server's duration
+  // would include the rests and its tempo penalty would fire on a good set.
+  let restedMs = 0;
 
   // Live calibration. Fixed anatomical cutoffs are unreachable for a stiff
   // joint, and a chin tuck only travels ~15 degrees in total, so the
@@ -270,8 +284,23 @@ export function createSession({ video, canvas, config, lang, onUpdate, onComplet
     // reach and left the rep counter stuck on zero.
     const source = pose;
 
+    // Resting between sets. The camera stays on so the patient can see
+    // themselves, but nothing is recorded or counted: rest frames would burn
+    // the MAX_FRAMES budget and let idle movement score phantom reps.
+    if (resting) {
+      const left = Math.ceil((restUntil - elapsedMs) / 1000);
+      if (left > 0) {
+        emit(elapsedMs,
+             t(`Rest - set ${currentSet} of ${totalSets} starts in ${left}s`,
+               `आराम - सेट ${currentSet}/${totalSets} ${left}s में शुरू`), 'good');
+        return;
+      }
+      restedMs += elapsedMs - restStartedAt;
+      resting = false;
+    }
+
     frames.push({
-      t: Math.round(elapsedMs),
+      t: Math.round(elapsedMs - restedMs),
       lm: source.map(p => [
         +p.x.toFixed(4), +p.y.toFixed(4), +(p.z ?? 0).toFixed(4),
         +(p.visibility ?? 1).toFixed(3),
@@ -303,9 +332,18 @@ export function createSession({ video, canvas, config, lang, onUpdate, onComplet
     }
     emit(elapsedMs, message, tone);
 
-    // Target reached, or the recording buffer is full. Either way, bank the
+    if (finished || resting) return;
+
+    // Set finished but more to go: rest, then run the next one.
+    if (reps >= config.target_reps && currentSet < totalSets) {
+      currentSet++;
+      beginRest(elapsedMs);
+      return;
+    }
+
+    // Last set done, or the recording buffer is full. Either way, bank the
     // session rather than let it grow into a request the server will reject.
-    if (!finished && (reps >= config.target_reps || frames.length >= MAX_FRAMES)) {
+    if (reps >= config.target_reps || frames.length >= MAX_FRAMES) {
       finished = true;
       if (reps < config.target_reps) {
         emit(elapsedMs, t('Time limit reached - saving your session',
@@ -314,6 +352,20 @@ export function createSession({ video, canvas, config, lang, onUpdate, onComplet
       stop();
       onComplete(frames);
     }
+  }
+
+  /** Reset for the next set. Calibration is deliberately NOT reset: it
+   *  describes this patient's range, which does not change between sets. */
+  function beginRest(elapsedMs) {
+    reps = 0;
+    state = 'high';
+    lowRun = 0;
+    highRun = 0;
+    holdStart = null;
+    holdArmed = true;
+    resting = true;
+    restStartedAt = elapsedMs;
+    restUntil = elapsedMs + restSeconds * 1000;
   }
 
   function updateReps(primary, elapsedMs) {
@@ -386,6 +438,9 @@ export function createSession({ video, canvas, config, lang, onUpdate, onComplet
   function emit(elapsedMs, feedback, tone) {
     onUpdate({
       reps,
+      set: currentSet,
+      totalSets,
+      resting,
       target: config.target_reps,
       seconds: Math.floor(elapsedMs / 1000),
       quality: totalFrames ? Math.round((trackedFrames / totalFrames) * 100) : 0,
@@ -410,6 +465,7 @@ export function createSession({ video, canvas, config, lang, onUpdate, onComplet
     stop,
     getFrames: () => frames,
     getReps: () => reps,
+    getSet: () => currentSet,
   };
 }
 
