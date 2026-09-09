@@ -96,6 +96,10 @@ RANGES = {
     "chin-tuck": (167, 152),                # only 15 degrees of travel
     "neck-lateral-flexion": (168, 145),
     "posture-row": (165, 78), "thoracic-ext": (118, 92),
+    # Strength work: a trained adult's travel at the tracked joint.
+    "push-up": (168, 88), "pull-up": (172, 60),
+    "dumbbell-curl": (168, 45), "shoulder-press": (172, 82),
+    "forward-lunge": (172, 92), "sit-up": (152, 72),
 }
 
 RANGE_MODE = [e for e in EXERCISES if e["pose"].get("mode", "range") == "range"

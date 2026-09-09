@@ -30,6 +30,7 @@ from .landmarks import (
     R_ANKLE, R_EAR, R_ELBOW, R_HIP, R_KNEE, R_SHOULDER, R_WRIST,
 )
 from .postures import PRONE, QUADRUPED, SEATED, STANDING, SUPINE, frames
+from .strength_data import STRENGTH_EXERCISES
 
 # --- reusable form rules ----------------------------------------------------
 KNEE_STRAIGHT = {
@@ -919,10 +920,15 @@ EXERCISES: list[dict] = [
     },
 ]
 
+# General fitness work lives in its own module and its own category, so the
+# rehab catalogue above stays purely clinical and the planner never prescribes
+# a pull-up to an injured shoulder.
+EXERCISES += STRENGTH_EXERCISES
+
 BY_SLUG = {e["slug"]: e for e in EXERCISES}
 POSE_CONFIGS = {e["slug"]: e["pose"] for e in EXERCISES}
 
-CATEGORIES = ["back", "knee", "hip", "shoulder", "neck", "posture"]
+CATEGORIES = ["back", "knee", "hip", "shoulder", "neck", "posture", "strength"]
 
 
 def pose_config(slug: str) -> dict | None:
