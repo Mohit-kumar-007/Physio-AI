@@ -1,0 +1,57 @@
+# Production stack for a single EC2 instance.
+#   caddy -> terminates TLS, serves HTTPS  (the camera needs it)
+#   app   -> FastAPI, reachable only on the internal network
+#
+#   docker compose up -d --build
+
+services:
+  app:
+    build: .
+    restart: always
+    environment:
+      PHYSIO_ENV: production
+      PHYSIO_SECRET_KEY: ${PHYSIO_SECRET_KEY:?set PHYSIO_SECRET_KEY in .env}
+      PHYSIO_DATABASE_URL: sqlite:////data/physio.db
+      PHYSIO_UPLOAD_DIR: /data/uploads
+      PHYSIO_JWT_EXPIRE_HOURS: ${PHYSIO_JWT_EXPIRE_HOURS:-168}
+      # Only Caddy can reach this container, so its forwarded address is
+      # trustworthy. Rate limiting keys on it, and trusting a wider range
+      # would let a caller spoof their way around the limit.
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
+    volumes:
+      # Accounts, sessions and uploaded medical reports. Anything written
+      # outside this volume is destroyed on the next rebuild.
+      - physio-data:/data
+    # No ports: block. Publishing 8000 would expose the app over plain HTTP,
+    # bypassing Caddy and every security header it sets.
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request;urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: always
+    depends_on:
+      - app
+    ports:
+      - "80:80"      # needed for the ACME HTTP challenge and the HTTPS redirect
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+      EMAIL: ${EMAIL:?set EMAIL in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data      # issued certificates live here - keep this volume
+      - caddy-config:/config
+
+volumes:
+  physio-data:
+  caddy-data:
+  caddy-config:

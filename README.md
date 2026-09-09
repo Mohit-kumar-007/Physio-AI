@@ -146,6 +146,114 @@ so some movements need a proxy or a different metric entirely:
 Holds re-arm only after the patient leaves the band, so resting inside it does
 not score a rep every few seconds.
 
+## Deploying it live
+
+**HTTPS is not optional.** Browsers only expose the camera in a secure context,
+so on plain HTTP `getUserMedia` is blocked and the core feature is dead. Any
+host below terminates TLS for you; a bare VPS on HTTP will not work.
+
+Two more things decide the host:
+
+- **A long-lived process.** FastAPI is not serverless-shaped. Vercel and
+  Netlify functions do not fit without rewriting the storage layer.
+- **A persistent disk.** SQLite and uploaded reports are files. On an
+  ephemeral filesystem every redeploy silently resets accounts, sessions and
+  medical uploads. This is the most common way to lose real data, and free
+  tiers usually have no disk.
+
+### Render (recommended)
+
+`render.yaml` is in the repo and is configured for the **free** plan. Push it,
+then in Render choose **New > Blueprint** and pick the repository. It
+provisions the service, HTTPS and a generated `PHYSIO_SECRET_KEY`.
+
+Render's free plan has **no disk**, so SQLite would be wiped on every deploy
+and every restart. The blueprint therefore leaves `PHYSIO_DATABASE_URL` for
+you to fill in (`sync: false`, so the password never enters this repo) and
+expects a free hosted Postgres. [Neon](https://neon.tech) gives 0.5 GB with no
+card; create a database, copy the connection string, append `?sslmode=require`
+and paste it when Render prompts. Nothing in the code changes -- `db.py` takes
+any SQLAlchemy URL.
+
+Two things the free plan still costs you:
+
+- **Uploaded PDFs do not survive a restart.** The text and findings extracted
+  from them are stored in the database, so a report's clinical content
+  persists even though the original file does not.
+- **The service sleeps after ~15 minutes idle**, and the next visitor waits
+  roughly 50 seconds for it to wake.
+
+To remove both: set `plan: starter`, add a 1 GB disk at `/data`, and set
+`PHYSIO_DATABASE_URL=sqlite:////data/physio.db` plus
+`PHYSIO_UPLOAD_DIR=/data/uploads`.
+
+### Anywhere else
+
+The `Dockerfile` is portable and also installs Tesseract, so image OCR works in
+production even though it needs a manual install on Windows.
+
+```bash
+docker build -t physiomind . && docker run -p 8000:8000 -v physio-data:/data -e PHYSIO_SECRET_KEY=$(python -c "import secrets;print(secrets.token_urlsafe(32))") physiomind
+```
+
+- **Railway** — detects the Dockerfile. Add a volume at `/data`, set the env
+  vars from `.env.example`.
+- **AWS EC2 t3.micro** — free-tier eligible and enough for this app, but you
+  supply HTTPS yourself. See below.
+- **Fly.io** — `fly launch --no-deploy`, then
+  `fly volumes create physio_data --size 1`, mount it at `/data`, and
+  `fly secrets set PHYSIO_SECRET_KEY=...`. Has a Mumbai region, so it is the
+  lowest-latency option for users in India.
+- **VPS** — cheapest at scale, but you own TLS. Put Caddy in front (it gets
+  certificates automatically) rather than hand-rolling nginx and certbot.
+
+### AWS free tier
+
+Runs fine on **EC2 t3.micro** (1 GB RAM). Measured worst case is one request
+at ~65 MB plus a ~150 MB Python baseline, so a single instance handles real
+sessions comfortably. Lambda is a poor fit: no persistent filesystem for
+SQLite or uploads, and numpy needs a layer.
+
+The catch is TLS. An `ec2-….amazonaws.com` hostname cannot get a Let's Encrypt
+certificate, and without HTTPS the camera stays blocked. Three ways out:
+
+1. **Cloudflare Tunnel** — free, gives an HTTPS hostname, and needs no inbound
+   ports open at all. Simplest.
+2. **A domain you own** (~₹800/year) pointed at the instance, with **Caddy** in
+   front for automatic certificates.
+3. **DuckDNS** subdomain — free and Let's Encrypt issues for it.
+
+Also worth knowing: free tier is time-limited (the classic 12 months, or a
+credit allowance on newer accounts). After it lapses a t3.micro plus storage
+runs roughly $9-11/month, which is *more* than Render's managed tier — and on
+EC2 you also own patching, certificate renewal, backups and monitoring.
+
+```bash
+sudo apt update && sudo apt install -y docker.io
+sudo docker build -t physiomind .
+sudo docker run -d --restart=always -p 8000:8000   -v /srv/physio-data:/data   -e PHYSIO_SECRET_KEY="$(python3 -c 'import secrets;print(secrets.token_urlsafe(32))')"   physiomind
+```
+
+Give a 1 GB instance ~1 GB of swap (`fallocate -l 1G /swapfile`) so a traffic
+spike degrades instead of getting the process OOM-killed.
+
+### Before you go live
+
+- [ ] `PHYSIO_SECRET_KEY` set from a secret manager, never committed
+- [ ] `PHYSIO_ENV=production` (hides stack traces; the app refuses to boot
+      without a secret)
+- [ ] Database and uploads on a mounted disk, and a backup for it
+- [x] **Rate limiting on `/api/auth/login`** — implemented in
+      `backend/ratelimit.py` (10 logins/min, 5 signups/5min per address). It
+      keys on the client address, so the server **must** run with
+      `--proxy-headers`; without it every request appears to come from the
+      reverse proxy and one attacker exhausts everyone's budget.
+- [ ] Angle thresholds reviewed by a physiotherapist
+- [ ] A privacy policy, and a lawful basis for storing health data. This app
+      stores diagnoses and uploaded medical reports, which are sensitive
+      personal data under India's DPDP Act, GDPR and HIPAA. Do not put real
+      patient data in a demo deployment.
+
 ## Notes and limitations
 
 - **Angle thresholds in `backend/physio/exercise_data.py` are starting values.**

@@ -4,3 +4,7 @@ __pycache__/
 *.db
 uploads/
 .pytest_cache/
+
+# Secrets - never commit
+.env
+*.pem

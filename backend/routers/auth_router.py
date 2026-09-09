@@ -8,6 +8,7 @@ from sqlmodel import Session, select
 from ..auth import create_token, current_user, hash_password, verify_password
 from ..db import get_session
 from ..models import User
+from ..ratelimit import login_limit, signup_limit
 from ..schemas import LoginIn, SignupIn, TokenOut, UserOut
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -23,7 +24,8 @@ def _token_response(user: User) -> TokenOut:
     )
 
 
-@router.post("/signup", response_model=TokenOut, status_code=status.HTTP_201_CREATED)
+@router.post("/signup", response_model=TokenOut, status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(signup_limit)])
 def signup(body: SignupIn, session: Session = Depends(get_session)) -> TokenOut:
     email = body.email.lower()
     if session.exec(select(User).where(User.email == email)).first():
@@ -49,7 +51,8 @@ def signup(body: SignupIn, session: Session = Depends(get_session)) -> TokenOut:
 _DUMMY_HASH = hash_password("unusable-placeholder-for-timing-parity")
 
 
-@router.post("/login", response_model=TokenOut)
+@router.post("/login", response_model=TokenOut,
+             dependencies=[Depends(login_limit)])
 def login(body: LoginIn, session: Session = Depends(get_session)) -> TokenOut:
     user = session.exec(select(User).where(User.email == body.email.lower())).first()
     valid = verify_password(body.password, user.password_hash if user else _DUMMY_HASH)

@@ -1,0 +1,36 @@
+# Caddy fetches and renews the TLS certificate automatically. That is the whole
+# reason it is here: browsers only expose the camera over HTTPS, so without a
+# valid certificate the app's core feature does not run at all.
+
+{$DOMAIN} {
+	tls {$EMAIL}
+
+	encode gzip zstd
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+
+		# camera=(self) is REQUIRED. The sensible-looking camera=() would
+		# block getUserMedia and silently kill pose tracking.
+		Permissions-Policy "camera=(self), microphone=(self), geolocation=(), payment=()"
+
+		# MediaPipe pulls its wasm runtime from jsdelivr and the pose model
+		# from storage.googleapis.com, and creates workers from blob: URLs.
+		# script-src needs 'unsafe-inline' because index.html uses inline
+		# onclick handlers; the XSS risk that would normally justify removing
+		# it is already handled by escaping every interpolated value.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://cdn.jsdelivr.net https://storage.googleapis.com; frame-ancestors 'none'; base-uri 'self'; object-src 'none'"
+
+		-Server
+	}
+
+	# Uploaded reports and keypoint timelines are larger than Caddy's default.
+	request_body {
+		max_size 12MB
+	}
+
+	reverse_proxy app:8000
+}

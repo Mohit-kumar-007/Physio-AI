@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.git/
+.gitignore
+*.db
+uploads/
+exercise-previews.html
+deploy/
+DEPLOY-AWS.md
+.env

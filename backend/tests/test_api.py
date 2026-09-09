@@ -18,6 +18,16 @@ CREDS = {"name": "Test Patient", "email": "patient@example.com",
          "password": "correct-horse-battery"}
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    """Each test starts with a clean budget; the windows are process-global."""
+    from backend.ratelimit import login_window, signup_window
+
+    login_window.reset()
+    signup_window.reset()
+    yield
+
+
 @pytest.fixture(name="client")
 def client_fixture():
     engine = create_engine(
@@ -367,3 +377,103 @@ def test_new_columns_are_added_without_dropping_data(tmp_path):
     with engine.begin() as conn:
         row = conn.execute(text("SELECT reps FROM sessions WHERE id = 1")).one()
     assert row[0] == 7          # the existing session survived
+
+
+def test_oversized_session_is_rejected_not_crashed(client, auth):
+    """The frame cap is a memory bound; exceeding it must 413, not OOM."""
+    from backend.config import MAX_SESSION_FRAMES
+
+    frame = {"t": 0, "lm": [[0.5, 0.5, 0.0, 1.0]] * 33}
+    response = client.post("/api/sessions", headers=auth, json={
+        "exercise_slug": "terminal-knee-ext",
+        "frames": [frame] * (MAX_SESSION_FRAMES + 1),
+    })
+    assert response.status_code == 413
+
+
+def test_frame_cap_matches_the_client_constant():
+    """pose.js stops recording at its own copy of this number. If the two
+    drift apart the client keeps filming into a request the server rejects,
+    and the patient loses the whole session."""
+    import re
+    from pathlib import Path
+
+    from backend.config import MAX_SESSION_FRAMES
+
+    source = Path(__file__).resolve().parents[2] / "pose.js"
+    match = re.search(r"MAX_FRAMES\s*=\s*(\d+)", source.read_text(encoding="utf-8"))
+    assert match, "MAX_FRAMES not found in pose.js"
+    assert int(match.group(1)) == MAX_SESSION_FRAMES
+
+
+# --- rate limiting ----------------------------------------------------------
+def test_login_brute_force_is_blocked(client):
+    """A public deployment must not allow unlimited password guesses."""
+    from backend.ratelimit import LOGIN_ATTEMPTS
+
+    client.post("/api/auth/signup", json=CREDS)
+
+    codes = [
+        client.post("/api/auth/login", json={
+            "email": CREDS["email"], "password": f"guess-{i}"}).status_code
+        for i in range(LOGIN_ATTEMPTS + 4)
+    ]
+    assert 429 in codes, "brute force was never throttled"
+    assert codes.index(429) <= LOGIN_ATTEMPTS
+
+
+def test_throttled_response_says_when_to_retry(client):
+    from backend.ratelimit import LOGIN_ATTEMPTS
+
+    for _ in range(LOGIN_ATTEMPTS + 2):
+        response = client.post("/api/auth/login", json={
+            "email": "nobody@example.com", "password": "x"})
+    assert response.status_code == 429
+    assert "Retry-After" in response.headers
+    assert int(response.headers["Retry-After"]) > 0
+
+
+def test_signup_flooding_is_blocked(client):
+    from backend.ratelimit import SIGNUP_ATTEMPTS
+
+    codes = [
+        client.post("/api/auth/signup", json={
+            "name": "Bot", "email": f"bot{i}@example.com",
+            "password": "a-long-enough-password"}).status_code
+        for i in range(SIGNUP_ATTEMPTS + 3)
+    ]
+    assert 429 in codes
+
+
+def test_rate_limit_does_not_block_a_correct_login(client):
+    """Throttling must not lock out the legitimate user it protects."""
+    client.post("/api/auth/signup", json=CREDS)
+    for _ in range(3):
+        client.post("/api/auth/login", json={
+            "email": CREDS["email"], "password": "wrong"})
+    ok = client.post("/api/auth/login", json={
+        "email": CREDS["email"], "password": CREDS["password"]})
+    assert ok.status_code == 200
+
+
+def test_window_expiry_restores_the_budget():
+    """The window must slide, not latch permanently."""
+    import time as _time
+
+    from backend.ratelimit import SlidingWindow
+
+    window = SlidingWindow(limit=2, window_seconds=1)
+    assert window.check("ip") is None
+    assert window.check("ip") is None
+    assert window.check("ip") is not None      # third is over budget
+    _time.sleep(1.05)
+    assert window.check("ip") is None          # budget back after the window
+
+
+def test_limits_are_tracked_per_address():
+    from backend.ratelimit import SlidingWindow
+
+    window = SlidingWindow(limit=1, window_seconds=60)
+    assert window.check("1.1.1.1") is None
+    assert window.check("1.1.1.1") is not None
+    assert window.check("2.2.2.2") is None     # a different caller is unaffected

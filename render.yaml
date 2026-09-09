@@ -1,0 +1,52 @@
+# Render blueprint. Push this file, then in Render: New > Blueprint > pick repo.
+# Everything below is created for you, including HTTPS.
+services:
+  - type: web
+    name: physiomind
+    runtime: python
+    region: singapore          # closest Render region to India
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    healthCheckPath: /api/health
+
+    # --proxy-headers is REQUIRED here. Render terminates TLS at its edge and
+    # proxies to this service, so without it request.client.host is Render's
+    # internal proxy address -- the same for every visitor. Rate limiting keys
+    # on that, so 10 logins/min would collapse from a per-attacker budget into
+    # one global budget and a single fumbled password would lock out everyone.
+    #
+    # forwarded-allow-ips='*' is safe ONLY because this service is unreachable
+    # except through Render's proxy; nothing else can set the header.
+    startCommand: >-
+      uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+      --proxy-headers --forwarded-allow-ips='*'
+
+    envVars:
+      - key: PHYSIO_SECRET_KEY
+        generateValue: true          # Render generates and stores it for you
+      - key: PHYSIO_ENV
+        value: production
+
+      # The free plan has NO persistent disk, so SQLite would be wiped on every
+      # deploy and every restart. Point this at a free hosted Postgres instead
+      # (Neon: 0.5 GB, no card) and accounts and sessions survive.
+      #
+      # sync: false means Render prompts you for the value in the dashboard,
+      # so the connection string -- which carries a password -- never enters
+      # this repo. Paste the Neon URL, appending ?sslmode=require.
+      - key: PHYSIO_DATABASE_URL
+        sync: false
+
+      - key: PYTHON_VERSION
+        value: "3.13.9"
+
+    # NOTE: no `disk:` block -- Render's free plan does not support one, and
+    # PHYSIO_UPLOAD_DIR is deliberately left unset so uploads land in the
+    # writable ./uploads default rather than a /data mount that will not exist.
+    # Uploaded PDFs are therefore lost on restart; the text and findings
+    # extracted from them are already stored in the database, so a report's
+    # clinical content survives even though the original file does not.
+    #
+    # Upgrading later: set plan to `starter`, add a 1 GB disk at /data, and set
+    # PHYSIO_DATABASE_URL=sqlite:////data/physio.db plus
+    # PHYSIO_UPLOAD_DIR=/data/uploads.

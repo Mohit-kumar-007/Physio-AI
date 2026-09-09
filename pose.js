@@ -29,6 +29,11 @@ const MIN_DWELL_FRAMES = 2;
 const MIN_VISIBILITY = 0.5;
 const FORM_RULE_GRACE_FRAMES = 8;   // ignore a brief breach before nagging
 
+// Must match MAX_SESSION_FRAMES in backend/config.py. Recording past it would
+// earn a 413 on submit and throw away the patient's entire session, so stop
+// and bank what we have instead. 3 minutes at 30fps.
+const MAX_FRAMES = 5400;
+
 let landmarker = null;
 let loadingPromise = null;
 
@@ -298,8 +303,14 @@ export function createSession({ video, canvas, config, lang, onUpdate, onComplet
     }
     emit(elapsedMs, message, tone);
 
-    if (!finished && reps >= config.target_reps) {
+    // Target reached, or the recording buffer is full. Either way, bank the
+    // session rather than let it grow into a request the server will reject.
+    if (!finished && (reps >= config.target_reps || frames.length >= MAX_FRAMES)) {
       finished = true;
+      if (reps < config.target_reps) {
+        emit(elapsedMs, t('Time limit reached - saving your session',
+                          'समय सीमा पूरी - आपका सत्र सहेजा जा रहा है'), 'warn');
+      }
       stop();
       onComplete(frames);
     }
